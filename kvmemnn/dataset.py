@@ -1,10 +1,8 @@
 import torchtext
 
-from memory import KeyValueMemory
 
-
-CPU = -1
 GPU = 0
+CPU = -1
 DATA_PATH = 'data/processed/data.csv'
 
 
@@ -41,15 +39,3 @@ class Dataset(object):
         )
 
         return iter(bucket_iter)
-
-
-if __name__ == '__main__':
-    dataset = Dataset()
-
-    memory = KeyValueMemory(dataset.data)
-
-    while True:
-        query = input('> ')
-        key = query.split(' ')
-        memories = memory[key]
-        print(memories)
