@@ -102,3 +102,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# pretraiend word vectors cache
+.vector_cache/
