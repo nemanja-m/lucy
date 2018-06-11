@@ -1,4 +1,5 @@
 import torchtext
+import torch
 
 
 GPU = 0
@@ -13,6 +14,7 @@ class Dataset(object):
         self._device = device
 
         self._field = torchtext.data.Field(tokenize='spacy',
+                                           tensor_type=torch.cuda.LongTensor,
                                            lower=True,
                                            batch_first=True)
 
@@ -29,6 +31,12 @@ class Dataset(object):
 
         self._field.build_vocab(self.data)
         self.vocab = self._field.vocab
+
+    def process(self, batch, train=True):
+        return self._field.process(batch, device=self._device, train=train)
+
+    def numericalize(self, tokens):
+        return self._field.numericalize([tokens], device=self._device)
 
     def __iter__(self):
         bucket_iter = torchtext.data.BucketIterator(
