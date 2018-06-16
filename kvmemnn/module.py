@@ -10,7 +10,7 @@ class KVMemoryNN(torch.nn.Module):
                                             embedding_dim,
                                             padding_idx=1,
                                             max_norm=10,
-                                            sparse=True)
+                                            sparse=False)
 
         self.linear = torch.nn.Linear(embedding_dim, embedding_dim, bias=False)
 

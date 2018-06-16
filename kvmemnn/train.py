@@ -1,61 +1,88 @@
+import argparse
+from time import time
+
+import numpy as np
+import torch
+
 from dataset import Dataset
 from memory import KeyValueMemory
 from module import KVMemoryNN
 
-import torch
-import numpy as np
 
+EPOCHS = 100
 
-dataset = Dataset()
-kv_memory = KeyValueMemory(dataset)
+def train(device):
+    print('-- Loading dataset\n')
+    dataset = Dataset(device_type=device.type)
+    kv_memory = KeyValueMemory(dataset)
 
-model = KVMemoryNN(vocab_size=len(dataset.vocab),
-                   embedding_dim=128)
-model.cuda()
-model.train()
+    model = KVMemoryNN(vocab_size=len(dataset.vocab), embedding_dim=128)
+    model.to(device=device)
+    model.train()
 
-criterion = torch.nn.CosineEmbeddingLoss(margin=0.1, size_average=False).cuda()
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+    criterion = torch.nn.CosineEmbeddingLoss(margin=0.1, size_average=False).to(device=device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
-losses = []
+    for epoch in range(EPOCHS):
+        print('Epoch: {}/{}'.format(epoch, EPOCHS))
+        losses = []
+        iter_start = time()
 
-for epoch in range(100):
-    print('Epoch: {}'.format(epoch))
+        for iteration, example in enumerate(dataset.data.examples):
+            optimizer.zero_grad()
 
-    for i, example in enumerate(dataset.data.examples):
-        if i % 500 == 0:
-            print(i)
+            memories = kv_memory[example.query]
 
-        optimizer.zero_grad()
+            keys = [key for key, _ in memories]
+            values = [value for _, value in memories]
 
-        memories = kv_memory[example.query]
+            # Make sure that correct query - response pair is first element in memory
+            try:
+                idx = keys.index(example.query)
+                keys[0], keys[idx] = keys[idx], keys[0]
+                values[0], values[idx] = values[idx], values[0]
+            except ValueError:
+                keys[0] = example.query
+                values[0] = example.response
 
-        keys = [key for key, _ in memories]
-        values = [value for _, value in memories]
+            keys_tensor = dataset.process(keys).to(device=device)
+            values_tensor = dataset.process(values).to(device=device)
+            query = dataset.process([example.query]).to(device=device)
 
-        # Make sure that correct query - response pair is first element in memory
-        try:
-            idx = keys.index(example.query)
-            keys[0], keys[idx] = keys[idx], keys[0]
-            values[0], values[idx] = values[idx], values[0]
-        except ValueError:
-            keys[0] = example.query
-            values[0] = example.response
+            xe, ye = model(query, keys_tensor, values_tensor)
 
-        keys_tensor = dataset.process(keys)
-        values_tensor = dataset.process(values)
-        query = dataset.process([example.query])
-        response = dataset.process([example.response])
+            y = torch.tensor([-1.0] * xe.size(0), device=device)
+            y[0] = 1
 
-        xe, ye = model(query.cuda(), keys_tensor.cuda(), values_tensor.cuda())
+            loss = criterion(xe, ye, y)
+            loss.backward()
+            optimizer.step()
 
-        y = torch.autograd.Variable(torch.cuda.FloatTensor([-1.0] * xe.size(0)))
-        y[0] = 1
+            losses.append(loss.item())
+            iter_end = time()
+            avg_loss = np.mean(losses)
 
-        loss = criterion(xe, ye, y)
-        loss.backward()
-        optimizer.step()
-        losses.append(loss.item())
+            if iteration % 100 == 0:
+                iters_time = time() - iter_start
+                print('Iteration: {}/{}\tLoss: {:.3f}\tTime: {:.3f}'.format(iteration,
+                                                                            len(dataset.data.examples),
+                                                                            avg_loss,
+                                                                            iters_time))
+                iter_start = time()
 
-    avg_loss = np.mean(losses)
-    print('Loss: {}'.format(avg_loss))
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cuda', action='store_true', help='Enable CUDA training')
+    return parser.parse_args()
+
+if __name__ == '__main__':
+    args = parse_args()
+
+    if args.cuda and torch.cuda.is_available():
+        device = torch.device('cuda')
+        print('\n-- Using CUDA')
+    else:
+        device = torch.device('cpu')
+        print('\n-- Using CPU')
+
+    train(device=device)

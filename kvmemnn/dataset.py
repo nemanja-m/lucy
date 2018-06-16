@@ -9,12 +9,11 @@ DATA_PATH = 'data/processed/data.csv'
 
 class Dataset(object):
 
-    def __init__(self, path=DATA_PATH, batch_size=32, device=CPU):
+    def __init__(self, path=DATA_PATH, batch_size=32, device_type=CPU):
         self._batch_size = batch_size
-        self._device = device
+        self._device = CPU if device_type == 'cpu' else GPU
 
         self._field = torchtext.data.Field(tokenize='spacy',
-                                           tensor_type=torch.cuda.LongTensor,
                                            lower=True,
                                            batch_first=True)
 
