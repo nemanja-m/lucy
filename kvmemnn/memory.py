@@ -1,41 +1,178 @@
 import itertools
 import math
+import os
+import pickle
 from collections import Counter, defaultdict
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 
+EPS = 1e-12
 RELEVANT_MEMORIES_COUNT = 15
+CACHE_PATH = '.cache/query_memories.pkl'
 
 
 class KeyValueMemory(object):
 
-    def __init__(self, dataset):
+    def __init__(self, dataset, use_cached=True):
+        print('\nInitializing key-value memory')
+
+        self._use_cached = use_cached
+        self._query_matcher = QueryMatcher(dataset.data.examples)
+
         self.vocab = dataset.vocab
         self.process = dataset.process
-        self.numericalize = dataset.numericalize
-        self.keys, self.values = [], []
 
-        for example in dataset.data.examples:
-            self.keys.append(example.query)
-            self.values.append(example.response)
+        if use_cached:
+            if os.path.isfile(CACHE_PATH):
+                print(' - Queries memory cache loaded\n')
+                with open(CACHE_PATH, 'rb') as fp:
+                    self._cache = pickle.load(fp)
+            else:
+                print(' - Computing queries memory cache\n')
+                self._precompute_memories(dataset)
 
+    def batch_address(self, query_batch, response_batch, train=False):
+        batch_keys = []
+        batch_values = []
+
+        for idx in range(len(query_batch)):
+            query, response = query_batch[idx, :], response_batch[idx, :]
+            keys, values = zip(*self.address(query, response, train=train))
+            batch_keys.extend(keys)
+            batch_values.extend(values)
+
+        keys_tensor = self.process(batch_keys)
+        values_tensor = self.process(batch_values)
+
+        keys_view = keys_tensor.view(len(query_batch),
+                                     RELEVANT_MEMORIES_COUNT,
+                                     keys_tensor.shape[1])
+
+        values_view = values_tensor.view(len(query_batch),
+                                         RELEVANT_MEMORIES_COUNT,
+                                         values_tensor.shape[1])
+        return keys_view, values_view
+
+    def address(self, query, response=None, train=False):
+        if len(query) == 0:
+            raise KeyError('Query is empty')
+
+        if isinstance(query, torch.Tensor):
+            query = self._tensor_to_tokens(query)
+            if response is not None:
+                response = self._tensor_to_tokens(response)
+
+        if self._use_cached and train:
+            return self._cache[repr(query)]
+
+        return self._query_matcher.most_similar(query, response)
+
+    def _tensor_to_tokens(self, tensor):
+        pad_token_idx = self.vocab.stoi['<pad>']
+        return [self.vocab.itos[idx] for idx in tensor.data if idx != pad_token_idx]
+
+    def _precompute_memories(self, dataset, out_file=CACHE_PATH):
+        cache = {}
+        for example in tqdm(dataset.data.examples):
+            query, response = example.query, example.response
+            memories = self.address(query, response)
+            cache[repr(query)] = memories
+
+        with open(out_file, 'wb') as fp:
+            pickle.dump(cache, fp, protocol=pickle.HIGHEST_PROTOCOL)
+            print('\n - Cache saved to \'{}\'\n'.format(out_file))
+
+        self._cache = cache
+
+
+class QueryMatcher(object):
+
+    def __init__(self, examples):
+        self.queries, self.responses = [], []
+
+        for example in examples:
+            self.queries.append(example.query)
+            self.responses.append(example.response)
+
+        self._tokens = set(itertools.chain.from_iterable(self.queries))
+
+        print(' - Calculating term frequencies')
         self._calculate_term_freqs()
+
+        print(' - Calculating inverse document frequencies')
         self._calculate_inverse_doc_freqs()
 
+    def most_similar(self, input_query, input_response=None, n=RELEVANT_MEMORIES_COUNT):
+        input_query_vector, candidate_query_vectors = self._vectorize_queries(
+            input_query)
+
+        use_cosine_similarity = len(input_query) > 1
+
+        if use_cosine_similarity:
+            dot_product = np.dot(candidate_query_vectors, input_query_vector)
+            cand_norm = np.linalg.norm(candidate_query_vectors, axis=1)
+            query_norm = np.linalg.norm(input_query_vector)
+            norm = cand_norm * query_norm
+            norm = norm[:, np.newaxis]
+            similarities = dot_product / (norm + EPS)
+        else:
+            is_unknown_word = input_query[0] not in self._tokens
+            if is_unknown_word:
+                return []
+
+            # Can't compute cosine similarity for scalars
+            diff = np.abs(candidate_query_vectors - input_query_vector)
+            maxs = np.maximum(candidate_query_vectors, input_query_vector)
+            similarities = 1 - diff / maxs
+
+        similarities = similarities.squeeze()
+        indices = similarities.argsort()[-n:]
+
+        relevant_memories = []
+        for idx in reversed(indices):
+            query = self.queries[idx]
+            response = self.responses[idx]
+
+            # Make sure that query - response pair is first returned memory
+            exact_match = input_response is not None \
+                and input_query == query \
+                and input_response == response
+
+            if exact_match:
+                relevant_memories.insert(0, (query, response))
+            else:
+                relevant_memories.append((query, response))
+        return relevant_memories
+
+    def _vectorize_queries(self, input_query):
+        input_query_vector = np.zeros((len(input_query), 1))
+        candidate_query_vectors = np.zeros(
+            (len(self.queries), len(input_query)))
+        input_query_tf = self._term_freqs(input_query)
+        for i, token in enumerate(input_query):
+            input_query_vector[i] = input_query_tf[token] * \
+                self.inverse_doc_freqs[token]
+            for query, query_tf in enumerate(self.term_freqs_per_query):
+                candidate_query_vectors[query, i] = query_tf[token] * \
+                    self.inverse_doc_freqs[token]
+        return input_query_vector, candidate_query_vectors
+
     def _calculate_term_freqs(self):
-        self.term_freqs_per_key = [self._term_freqs(query) for query in self.keys]
+        self.term_freqs_per_query = [
+            self._term_freqs(query) for query in self.queries]
 
     def _calculate_inverse_doc_freqs(self):
         idf = defaultdict(int)
-        tokens = set(itertools.chain.from_iterable(self.keys))
-        for token in tokens:
-            keys_with_token = sum(
-                1 for term_freqs in self.term_freqs_per_key
+        for token in self._tokens:
+            queries_with_token = sum(
+                1 for term_freqs in self.term_freqs_per_query
                 if token in term_freqs
             )
-            idf[token] = math.log(len(self.keys) / (1.0 + keys_with_token))
+            idf[token] = math.log(len(self.queries) /
+                                  (1.0 + queries_with_token))
         self.inverse_doc_freqs = idf
 
     def _term_freqs(self, doc):
@@ -44,101 +181,19 @@ class KeyValueMemory(object):
             counter[token] /= len(doc)
         return counter
 
-    def get(self, query_batch, device):
-        keys = []
-        values = []
-        for query in query_batch:
-            k, v = zip(*self[query])
-            keys.extend(k)
-            values.extend(v)
-
-        keys_tensor = self.process(keys).to(device=device)
-        values_tensor = self.process(values).to(device=device)
-
-        batch_size = len(query_batch)
-
-        keys_view = keys_tensor.view(batch_size,
-                                     RELEVANT_MEMORIES_COUNT,
-                                     keys_tensor.shape[1])
-        values_view = values_tensor.view(batch_size,
-                                       RELEVANT_MEMORIES_COUNT,
-                                       values_tensor.shape[1])
-
-        return keys_view, values_view
-
-    def __getitem__(self, query):
-        if len(query) == 0:
-            raise KeyError('Query is empty')
-
-        if isinstance(query, torch.Tensor):
-            pad_token_idx = self.vocab.stoi['<pad>']
-            query = [self.vocab.itos[idx] for idx in query.data if idx != pad_token_idx]
-
-        keys_vectors = self._vectorize_keys(query)
-        query_vector = self._vectorize_query(query)
-
-        use_cosine_similarity = len(query) > 1
-
-        if use_cosine_similarity:
-            dot_product = np.dot(keys_vectors, query_vector)
-            norm = np.linalg.norm(keys_vectors, axis=1) * np.linalg.norm(query_vector)
-            # Reshape norms for element-wise division
-            norm = norm[:, np.newaxis]
-            # Prevent division by zero
-            norm[norm == 0] = 1e-5
-            similarities = dot_product / norm
-        else:
-            is_unknown_word = query[0] not in self.vocab.stoi
-            if is_unknown_word:
-                return []
-
-            # Can't compute cosine similarity for scalars
-            diff = np.abs(keys_vectors - query_vector)
-            maxs = np.maximum(keys_vectors, query_vector)
-            similarities = 1 - diff / maxs
-
-        similarities = similarities.squeeze()
-        indices = similarities.argsort()[-RELEVANT_MEMORIES_COUNT:]
-
-        relevant_memories = []
-        for idx in reversed(indices):
-            key = self.keys[idx]
-            value = self.values[idx]
-            relevant_memories.append((key, value))
-        return relevant_memories
-
-    def _vectorize_keys(self, query):
-        shape = (len(self.keys), len(query))
-        vectors = np.zeros(shape)
-        for key, term_freqs in enumerate(self.term_freqs_per_key):
-            for i, token in enumerate(query):
-                tf = term_freqs[token]
-                idf = self.inverse_doc_freqs[token]
-                vectors[key, i] = tf * idf
-        return vectors
-
-    def _vectorize_query(self, query):
-        vector = np.zeros((len(query), 1))
-        term_freqs = self._term_freqs(query)
-        for i, token in enumerate(query):
-            tf = term_freqs[token]
-            idf = self.inverse_doc_freqs[token]
-            vector[i] = tf * idf
-        return vector
-
 
 if __name__ == '__main__':
     # Interactive testing for relevant memories retrieval
     from dataset import Dataset
 
     dataset = Dataset()
-    kv_memory = KeyValueMemory(dataset)
+    kv_memory = KeyValueMemory(dataset, use_cached=True)
 
     while True:
         print()
         query = input('> ')
         key = query.split(' ')
-        memories = kv_memory[key]
+        memories = kv_memory.address(key)
         for key, value in memories:
             print('{} : {}'.format(' '.join(key),
                                    ' '.join(value)))

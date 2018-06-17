@@ -8,6 +8,8 @@ DATA_PATH = 'data/processed/data.csv'
 class Dataset(object):
 
     def __init__(self, path=DATA_PATH, batch_size=32):
+        print('\nLoading dataset')
+
         self._batch_size = batch_size
         self._device = CPU
 
@@ -21,26 +23,24 @@ class Dataset(object):
         ]
 
         self.data = torchtext.data.TabularDataset(
-            path='data/processed/data.csv',
+            path=path,
             format='csv',
             fields=fields
         )
 
+        print(' - Building vocabulary')
         self._field.build_vocab(self.data)
         self.vocab = self._field.vocab
 
-    def process(self, batch, train=True):
-        return self._field.process(batch, device=self._device, train=train)
-
-    def numericalize(self, tokens):
-        return self._field.numericalize([tokens], device=self._device)
-
-    def __iter__(self):
-        bucket_iter = torchtext.data.BucketIterator(
+        self.iterator = torchtext.data.BucketIterator(
             self.data,
             batch_size=self._batch_size,
             repeat=False,
             device=self._device
         )
 
-        return iter(bucket_iter)
+    def process(self, batch, train=True):
+        return self._field.process(batch, device=self._device, train=train)
+
+    def numericalize(self, tokens):
+        return self._field.numericalize([tokens], device=self._device)

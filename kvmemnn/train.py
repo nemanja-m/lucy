@@ -3,6 +3,8 @@ from time import time
 
 import numpy as np
 import torch
+from torch import optim
+from torch.nn import CosineEmbeddingLoss
 
 from dataset import Dataset
 from memory import KeyValueMemory
@@ -13,6 +15,7 @@ BATCH_SIZE = 64
 EPOCHS = 100
 EMBEDDING_DIM = 256
 
+
 def train(device):
     print('-- Loading dataset\n')
     dataset = Dataset(batch_size=BATCH_SIZE)
@@ -22,8 +25,8 @@ def train(device):
     model.to(device=device)
     model.train()
 
-    criterion = torch.nn.CosineEmbeddingLoss(margin=0.1, size_average=False).to(device=device)
-    optimizer = torch.optim.Adam(model.parameters())
+    criterion = CosineEmbeddingLoss(margin=0.1, size_average=False).to(device=device)
+    optimizer = optim.Adam(model.parameters())
 
     for epoch in range(EPOCHS):
         print('Epoch: {}/{}'.format(epoch, EPOCHS))
@@ -33,17 +36,18 @@ def train(device):
             iter_start = time()
             optimizer.zero_grad()
 
-            query = dataset.process(batch.query).to(device=device)
-            keys_tensor, values_tensor = kv_memory.get(batch.query, device=device)
+            keys_tensor, values_tensor = kv_memory.get(batch.query, batch.response)
 
-            xe, ye = model(query, keys_tensor, values_tensor)
+            xe, ye = model(batch.query.to(device=device),
+                           keys_tensor.to(device=device),
+                           values_tensor.to(device=device))
 
             targets = -torch.ones(xe.shape[:2], device=device)
             targets[:, 0] = 1
 
             cos_losses = torch.stack([
                 criterion(xe[i, :, :], ye[i, :, :], targets[i, :])
-                for i in range(BATCH_SIZE)
+                for i in range(len(xe))
             ])
 
             loss = torch.sum(cos_losses) / BATCH_SIZE
