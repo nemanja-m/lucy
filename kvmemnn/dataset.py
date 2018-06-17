@@ -1,17 +1,15 @@
 import torchtext
-import torch
 
 
-GPU = 0
 CPU = -1
 DATA_PATH = 'data/processed/data.csv'
 
 
 class Dataset(object):
 
-    def __init__(self, path=DATA_PATH, batch_size=32, device_type=CPU):
+    def __init__(self, path=DATA_PATH, batch_size=32):
         self._batch_size = batch_size
-        self._device = CPU if device_type == 'cpu' else GPU
+        self._device = CPU
 
         self._field = torchtext.data.Field(tokenize='spacy',
                                            lower=True,

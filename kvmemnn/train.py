@@ -9,52 +9,44 @@ from memory import KeyValueMemory
 from module import KVMemoryNN
 
 
+BATCH_SIZE = 64
 EPOCHS = 100
+EMBEDDING_DIM = 256
 
 def train(device):
     print('-- Loading dataset\n')
-    dataset = Dataset(device_type=device.type)
+    dataset = Dataset(batch_size=BATCH_SIZE)
     kv_memory = KeyValueMemory(dataset)
 
-    model = KVMemoryNN(vocab_size=len(dataset.vocab), embedding_dim=128)
+    model = KVMemoryNN(vocab_size=len(dataset.vocab), embedding_dim=EMBEDDING_DIM)
     model.to(device=device)
     model.train()
 
     criterion = torch.nn.CosineEmbeddingLoss(margin=0.1, size_average=False).to(device=device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    optimizer = torch.optim.Adam(model.parameters())
 
     for epoch in range(EPOCHS):
         print('Epoch: {}/{}'.format(epoch, EPOCHS))
         losses = []
-        iter_start = time()
 
-        for iteration, example in enumerate(dataset.data.examples):
+        for iteration, batch in enumerate(dataset):
+            iter_start = time()
             optimizer.zero_grad()
 
-            memories = kv_memory[example.query]
-
-            keys = [key for key, _ in memories]
-            values = [value for _, value in memories]
-
-            # Make sure that correct query - response pair is first element in memory
-            try:
-                idx = keys.index(example.query)
-                keys[0], keys[idx] = keys[idx], keys[0]
-                values[0], values[idx] = values[idx], values[0]
-            except ValueError:
-                keys[0] = example.query
-                values[0] = example.response
-
-            keys_tensor = dataset.process(keys).to(device=device)
-            values_tensor = dataset.process(values).to(device=device)
-            query = dataset.process([example.query]).to(device=device)
+            query = dataset.process(batch.query).to(device=device)
+            keys_tensor, values_tensor = kv_memory.get(batch.query, device=device)
 
             xe, ye = model(query, keys_tensor, values_tensor)
 
-            y = torch.tensor([-1.0] * xe.size(0), device=device)
-            y[0] = 1
+            targets = -torch.ones(xe.shape[:2], device=device)
+            targets[:, 0] = 1
 
-            loss = criterion(xe, ye, y)
+            cos_losses = torch.stack([
+                criterion(xe[i, :, :], ye[i, :, :], targets[i, :])
+                for i in range(BATCH_SIZE)
+            ])
+
+            loss = torch.sum(cos_losses) / BATCH_SIZE
             loss.backward()
             optimizer.step()
 
@@ -62,13 +54,11 @@ def train(device):
             iter_end = time()
             avg_loss = np.mean(losses)
 
-            if iteration % 100 == 0:
-                iters_time = time() - iter_start
-                print('Iteration: {}/{}\tLoss: {:.3f}\tTime: {:.3f}'.format(iteration,
-                                                                            len(dataset.data.examples),
-                                                                            avg_loss,
-                                                                            iters_time))
-                iter_start = time()
+            iters_time = time() - iter_start
+            print('Batch: {}/{}\tLoss: {:.3f}\tTime: {:.3f}'.format(iteration,
+                                                                    len(dataset.data.examples) // BATCH_SIZE,
+                                                                    avg_loss,
+                                                                    iters_time))
 
 def parse_args():
     parser = argparse.ArgumentParser()

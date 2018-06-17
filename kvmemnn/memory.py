@@ -13,6 +13,7 @@ class KeyValueMemory(object):
 
     def __init__(self, dataset):
         self.vocab = dataset.vocab
+        self.process = dataset.process
         self.numericalize = dataset.numericalize
         self.keys, self.values = [], []
 
@@ -43,13 +44,33 @@ class KeyValueMemory(object):
             counter[token] /= len(doc)
         return counter
 
+    def get(self, query_batch, device):
+        keys = []
+        values = []
+        for query in query_batch:
+            k, v = zip(*self[query])
+            keys.extend(k)
+            values.extend(v)
+
+        keys_tensor = self.process(keys).to(device=device)
+        values_tensor = self.process(values).to(device=device)
+
+        batch_size = len(query_batch)
+
+        keys_view = keys_tensor.view(batch_size,
+                                     RELEVANT_MEMORIES_COUNT,
+                                     keys_tensor.shape[1])
+        values_view = values_tensor.view(batch_size,
+                                       RELEVANT_MEMORIES_COUNT,
+                                       values_tensor.shape[1])
+
+        return keys_view, values_view
+
     def __getitem__(self, query):
         if len(query) == 0:
             raise KeyError('Query is empty')
 
-        return_tensor = False
-        if isinstance(query, torch.LongTensor):
-            return_tensor = True
+        if isinstance(query, torch.Tensor):
             pad_token_idx = self.vocab.stoi['<pad>']
             query = [self.vocab.itos[idx] for idx in query.data if idx != pad_token_idx]
 
@@ -83,10 +104,6 @@ class KeyValueMemory(object):
         for idx in reversed(indices):
             key = self.keys[idx]
             value = self.values[idx]
-            if return_tensor:
-                # Convert list of tokens to tensors
-                key = self.numericalize(key)[0, :]
-                value = self.numericalize(value)[0, :]
             relevant_memories.append((key, value))
         return relevant_memories
 
