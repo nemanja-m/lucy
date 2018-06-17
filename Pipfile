@@ -12,6 +12,7 @@ torchtext = "==0.2.3"
 numpy = "*"
 spacy = "*"
 tqdm = "*"
+visdom = "*"
 
 [requires]
 python_version = "3.5"

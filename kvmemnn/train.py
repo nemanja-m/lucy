@@ -1,5 +1,6 @@
 import argparse
 
+from visdom import Visdom
 import numpy as np
 import torch
 from torch import optim
@@ -26,7 +27,16 @@ def train(device):
 
     criterion = CosineEmbeddingLoss(margin=0.1, size_average=False).to(device=device)
 
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(model.parameters(), lr=5.0e-3)
+
+    viz = Visdom()
+    win = viz.line(np.array([1]), np.array([0]), opts=dict(
+        width=800,
+        height=600,
+        title='Train Loss',
+        xlabel='Iteration',
+        ylabel='Loss'
+    ))
 
     for epoch in range(EPOCHS):
         losses = []
@@ -60,6 +70,8 @@ def train(device):
                 losses.append(loss.item())
                 pb.set_postfix_str('Loss: {:.3f}'.format(np.mean(losses)))
 
+        viz.line(np.array([np.mean(losses)]), np.array([epoch + 1]), win=win, update='append')
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Key-Value Memory Network on ALICE bot data')
@@ -73,7 +85,7 @@ if __name__ == '__main__':
     if torch.cuda.is_available() and not args.cpu:
         device = torch.device('cuda')
         print('\nUsing CUDA for training')
-        print('Pass \'--cpu\' to disable CUDA and train on CPU')
+        print('Pass \'--cpu\' argument to disable CUDA and train on CPU')
     else:
         device = torch.device('cpu')
         print('\nUsing CPU for training')
