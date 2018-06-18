@@ -8,10 +8,11 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from definitions import MEMORY_CACHE_PATH
+
 
 EPS = 1e-12
 RELEVANT_MEMORIES_COUNT = 15
-CACHE_PATH = '.cache/query_memories.pkl'
 
 
 class KeyValueMemory(object):
@@ -26,9 +27,9 @@ class KeyValueMemory(object):
         self.process = dataset.process
 
         if use_cached:
-            if os.path.isfile(CACHE_PATH):
+            if os.path.isfile(MEMORY_CACHE_PATH):
                 print(' - Queries memory cache loaded\n')
-                with open(CACHE_PATH, 'rb') as fp:
+                with open(MEMORY_CACHE_PATH, 'rb') as fp:
                     self._cache = pickle.load(fp)
             else:
                 print(' - Computing queries memory cache\n')
@@ -74,7 +75,7 @@ class KeyValueMemory(object):
         pad_token_idx = self.vocab.stoi['<pad>']
         return [self.vocab.itos[idx] for idx in tensor.data if idx != pad_token_idx]
 
-    def _precompute_memories(self, dataset, out_file=CACHE_PATH):
+    def _precompute_memories(self, dataset, out_file=MEMORY_CACHE_PATH):
         cache = {}
         for example in tqdm(dataset.data.examples):
             query, response = example.query, example.response
@@ -106,8 +107,7 @@ class QueryMatcher(object):
         self._calculate_inverse_doc_freqs()
 
     def most_similar(self, input_query, input_response=None, n=RELEVANT_MEMORIES_COUNT):
-        input_query_vector, candidate_query_vectors = self._vectorize_queries(
-            input_query)
+        input_query_vector, candidate_query_vectors = self._vectorize_queries(input_query)
 
         use_cosine_similarity = len(input_query) > 1
 
@@ -149,15 +149,18 @@ class QueryMatcher(object):
 
     def _vectorize_queries(self, input_query):
         input_query_vector = np.zeros((len(input_query), 1))
-        candidate_query_vectors = np.zeros(
-            (len(self.queries), len(input_query)))
+        candidate_query_vectors = np.zeros((len(self.queries), len(input_query)))
         input_query_tf = self._term_freqs(input_query)
+
         for i, token in enumerate(input_query):
-            input_query_vector[i] = input_query_tf[token] * \
-                self.inverse_doc_freqs[token]
+            tf = input_query_tf[token]
+            idf = self.inverse_doc_freqs[token]
+            input_query_vector[i] = tf * idf
+
             for query, query_tf in enumerate(self.term_freqs_per_query):
-                candidate_query_vectors[query, i] = query_tf[token] * \
-                    self.inverse_doc_freqs[token]
+                tf = query_tf[token]
+                idf = self.inverse_doc_freqs[token]
+                candidate_query_vectors[query, i] = tf * idf
         return input_query_vector, candidate_query_vectors
 
     def _calculate_term_freqs(self):
@@ -171,8 +174,7 @@ class QueryMatcher(object):
                 1 for term_freqs in self.term_freqs_per_query
                 if token in term_freqs
             )
-            idf[token] = math.log(len(self.queries) /
-                                  (1.0 + queries_with_token))
+            idf[token] = math.log(len(self.queries) / (1.0 + queries_with_token))
         self.inverse_doc_freqs = idf
 
     def _term_freqs(self, doc):
