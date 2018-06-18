@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "fdff195e252a98ccccc179c045e1e159ca83749d60217807a061a637e003c9b6"
+            "sha256": "ed518a93d1e76ff3d6077fc16d53f4f1768dfb0dadf2f4f24dd4e6f91f4c44b6"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -319,11 +319,8 @@
             "version": "==0.1.0"
         },
         "torchtext": {
-            "hashes": [
-                "sha256:268157efa287daa7fa78cc94e41d6e624dc1362dd85791df49ab86b888836de6"
-            ],
-            "index": "pypi",
-            "version": "==0.2.3"
+            "editable": true,
+            "git": "https://github.com/pytorch/text.git"
         },
         "tornado": {
             "hashes": [
