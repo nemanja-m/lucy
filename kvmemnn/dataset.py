@@ -1,8 +1,8 @@
 import torch
+from definitions import DATA_PATH
 from torchtext.data import Field, TabularDataset, BucketIterator, interleave_keys
 
 
-DATA_PATH = 'data/processed/data.csv'
 TRAIN_TEST_VAL_RATIO = [0.90, 0.05, 0.05]
 
 
