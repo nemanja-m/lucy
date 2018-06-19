@@ -161,6 +161,7 @@ class QueryMatcher(object):
                 tf = query_tf[token]
                 idf = self.inverse_doc_freqs[token]
                 candidate_query_vectors[query, i] = tf * idf
+
         return input_query_vector, candidate_query_vectors
 
     def _calculate_term_freqs(self):

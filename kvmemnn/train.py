@@ -5,7 +5,7 @@ from collections import namedtuple
 import numpy as np
 import torch
 from torch import optim
-from torch.nn import CosineEmbeddingLoss
+from torch.nn import CosineEmbeddingLoss, CosineSimilarity
 from tqdm import tqdm
 from visdom import Visdom
 
@@ -16,9 +16,9 @@ from module import KVMemoryNN
 
 EPOCHS = 100
 BATCH_SIZE = 64
-EMBEDDING_DIM = 512
+EMBEDDING_DIM = 128
 
-History = namedtuple('History', 'losses')
+History = namedtuple('History', ['losses', 'hits'])
 
 
 class Trainer(object):
@@ -35,8 +35,9 @@ class Trainer(object):
 
         self.loss_criterion = CosineEmbeddingLoss(margin=0.1,
                                                   size_average=False).to(device=device)
+        self.cosine_similarity = CosineSimilarity(dim=2)
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=5.0e-3)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=5.5e-3)
         self._init_visdom()
 
     def train(self, epochs):
@@ -68,14 +69,26 @@ class Trainer(object):
                     mean_loss = np.mean(self.history.losses[epoch])
                     pb.set_postfix_str('Loss: {:.3f}'.format(mean_loss))
 
-            self._validate()
-            self._update_visdom(epoch)
+                self._validate(epoch)
+                self._update_visdom(epoch)
 
-    def _validate(self):
-        # TODO
-        # hits@1 hits@5 hits@10
-        # accuracy, F1 score
-        pass
+    def _validate(self, epoch):
+        self.model.eval()
+
+        with torch.no_grad():
+            hits = []
+            for batch in self.data.validation_iter:
+                x_embedded, y_embedded = self._forward(batch)
+                predictions = self.cosine_similarity(x_embedded, y_embedded)
+                _, indices = predictions.sort(descending=True)
+
+                hits.append([self._hits_at_n(indices, n) for n in (1, 5, 10)])
+
+            mean_hits = np.array(hits).mean(axis=0)
+            self.history.hits[epoch] = mean_hits
+
+    def _hits_at_n(self, response_indices, n):
+        return response_indices[:, :n].eq(0).sum().item() / len(response_indices)
 
     def _forward(self, batch):
         keys_tensor, values_tensor = self.memory.batch_address(batch.query,
@@ -101,38 +114,56 @@ class Trainer(object):
 
     def _init_history(self, epochs):
         # Save loss history for each epoch
-        self.history = History(losses=[[] for _ in range(epochs)])
+        self.history = History(losses=[[]] * epochs,
+                               hits=[None] * epochs)
 
     def _init_visdom(self):
-        self.viz = Visdom()
+        self.visdom = Visdom()
 
         # Wait for connection
         startup_time = 1
         step = 0.1
-        while not self.viz.check_connection() and startup_time > 0:
+        while not self.visdom.check_connection() and startup_time > 0:
             time.sleep(step)
             startup_time -= step
 
-        assert self.viz.check_connection(), "Can't connect to visdom server. " \
-                                            "Start it with 'python -m visdom.server'"
+        assert self.visdom.check_connection(), "Can't connect to visdom server. " \
+                                               "Start it with 'python -m visdom.server'"
 
-        plot_options = dict(width=640,
-                            height=360,
-                            title='Train Loss',
-                            xlabel='Iteration',
-                            ylabel='Loss')
+        def plot_options(title, ylabel, **kwargs):
+            return dict(kwargs,
+                        width=640,
+                        height=420,
+                        title=title,
+                        xlabel='Iteration',
+                        ylabel=ylabel)
 
-        self.loss_window = self.viz.line(Y=np.array([1]),
-                                         X=np.array([0]),
-                                         opts=plot_options)
+        self.loss_window = self.visdom.line(Y=np.array([1]),
+                                            X=np.array([0]),
+                                            opts=plot_options(title='Train Loss',
+                                                              ylabel='Loss'))
+
+        self.hits_window = self.visdom.line(Y=np.zeros((1, 3)),
+                                            X=np.zeros((1, 3)),
+                                            opts=plot_options(title='hits@n',
+                                                              ylabel='%',
+                                                              showlegend=True,
+                                                              legend=['hits@1',
+                                                                      'hits@5',
+                                                                      'hits@10']))
 
     def _update_visdom(self, epoch):
         mean_loss = np.mean(self.history.losses[epoch])
+        self.visdom.line(Y=np.array([mean_loss]),
+                         X=np.array([epoch]),
+                         win=self.loss_window,
+                         update='append')
 
-        self.viz.line(Y=np.array([mean_loss]),
-                      X=np.array([epoch + 1]),
-                      win=self.loss_window,
-                      update='append')
+        hits = self.history.hits[epoch]
+        self.visdom.line(Y=np.array([hits]),
+                         X=np.ones((1, len(hits))) * epoch,
+                         win=self.hits_window,
+                         update='append')
 
 
 def parse_args():

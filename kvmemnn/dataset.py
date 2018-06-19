@@ -43,6 +43,14 @@ class Dataset(object):
             device=self._device
         )
 
+        self.iterator = BucketIterator(
+            dataset=self.data,
+            batch_size=self._batch_size,
+            repeat=False,
+            sort_key=lambda ex: interleave_keys(len(ex.query), len(ex.response)),
+            device=self._device
+        )
+
         print(' - Building vocabulary')
         self._field.build_vocab(self.data)
         self.vocab = self._field.vocab
