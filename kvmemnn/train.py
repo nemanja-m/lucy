@@ -14,9 +14,10 @@ from memory import KeyValueMemory
 from module import KVMemoryNN
 
 
-EPOCHS = 100
+EPOCHS = 50
 BATCH_SIZE = 64
-EMBEDDING_DIM = 128
+EMBEDDING_DIM = 256
+LEARNING_RATE = 1.0e-3
 
 History = namedtuple('History', ['losses', 'hits'])
 
@@ -35,9 +36,10 @@ class Trainer(object):
 
         self.loss_criterion = CosineEmbeddingLoss(margin=0.1,
                                                   size_average=False).to(device=device)
-        self.cosine_similarity = CosineSimilarity(dim=2)
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=5.5e-3)
+        self.cosine_similarity = CosineSimilarity(dim=2)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
+
         self._init_visdom()
 
     def train(self, epochs):
@@ -112,6 +114,30 @@ class Trainer(object):
         ])
         return torch.sum(cosine_embedding_losses) / len(x)
 
+    def process(self, query):
+        self.model.eval()
+
+        query_batch = self._batchify([query])
+        keys_tensor, values_tensor = self.memory.batch_address(query_batch,
+                                                               response_batch=None,
+                                                               train=False)
+
+        x_embedded, y_embedded = self.model(query_batch.to(device=self.device),
+                                            keys_tensor.to(device=self.device),
+                                            values_tensor.to(device=self.device))
+
+        predictions = self.cosine_similarity(x_embedded, y_embedded)
+        _, indices = predictions.sort(descending=True)
+
+        best_response_idx = indices[0][0].item()
+        best_response_tensor = values_tensor[0, best_response_idx]
+
+        response = self.memory._tensor_to_tokens(best_response_tensor)
+        return ' '.join(response)
+
+    def _batchify(self, query):
+        return self.data.process(query)
+
     def _init_history(self, epochs):
         # Save loss history for each epoch
         self.history = History(losses=[[]] * epochs,
@@ -131,10 +157,14 @@ class Trainer(object):
                                                "Start it with 'python -m visdom.server'"
 
         def plot_options(title, ylabel, **kwargs):
+            meta = 'lr: {} batch: {} emb: {}'.format(LEARNING_RATE,
+                                                     BATCH_SIZE,
+                                                     EMBEDDING_DIM)
+
             return dict(kwargs,
-                        width=640,
-                        height=420,
-                        title=title,
+                        width=420,
+                        height=360,
+                        title='{}\t{}'.format(title, meta),
                         xlabel='Iteration',
                         ylabel=ylabel)
 
@@ -168,7 +198,10 @@ class Trainer(object):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Key-Value Memory Network on ALICE bot data')
-    parser.add_argument('--cpu', action='store_true', help='Disable CUDA training and train on CPU')
+    parser.add_argument('--cpu', action='store_true',
+                        help='Disable CUDA training and train on CPU')
+    parser.add_argument('-i', '--interactive', action='store_true',
+                        help='Turn on interactive mode after training')
     return parser.parse_args()
 
 
@@ -185,3 +218,10 @@ if __name__ == '__main__':
 
     trainer = Trainer(device, BATCH_SIZE)
     trainer.train(epochs=EPOCHS)
+
+    if args.interactive:
+        print('\n')
+        while True:
+            query = input('> ')
+            response = trainer.process(query.split(' '))
+            print(response)

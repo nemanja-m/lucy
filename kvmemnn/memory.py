@@ -35,12 +35,16 @@ class KeyValueMemory(object):
                 print(' - Computing queries memory cache\n')
                 self._precompute_memories(dataset)
 
-    def batch_address(self, query_batch, response_batch, train=False):
+    def batch_address(self, query_batch, response_batch=None, train=False):
         batch_keys = []
         batch_values = []
 
         for idx in range(len(query_batch)):
-            query, response = query_batch[idx, :], response_batch[idx, :]
+            if isinstance(response_batch, torch.Tensor):
+                query, response = query_batch[idx, :], response_batch[idx, :]
+            else:
+                query, response = query_batch[idx, :], None
+
             keys, values = zip(*self.address(query, response, train=train))
             batch_keys.extend(keys)
             batch_values.extend(values)

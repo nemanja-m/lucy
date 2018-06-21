@@ -55,5 +55,5 @@ class Dataset(object):
         self._field.build_vocab(self.data)
         self.vocab = self._field.vocab
 
-    def process(self, batch, train=True):
+    def process(self, batch):
         return self._field.process(batch, device=self._device)
