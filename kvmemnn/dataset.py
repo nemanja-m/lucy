@@ -1,9 +1,16 @@
+import spacy
 import torch
 from definitions import DATA_PATH
 from torchtext.data import Field, TabularDataset, BucketIterator, interleave_keys
 
 
 TRAIN_TEST_VAL_RATIO = [0.90, 0.05, 0.05]
+
+spacy_en = spacy.load('en', disable=['parser', 'tagger', 'entity'])
+
+
+def tokenize(text):
+    return [token.norm_ for token in spacy_en(text) if not token.is_space]
 
 
 class Dataset(object):
@@ -18,7 +25,7 @@ class Dataset(object):
         self._batch_size = batch_size
         self._device = device
 
-        self._field = Field(tokenize='spacy',
+        self._field = Field(tokenize=tokenize,
                             lower=True,
                             batch_first=True)
 

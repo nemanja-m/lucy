@@ -11,8 +11,8 @@ from tqdm import tqdm
 from definitions import MEMORY_CACHE_PATH
 
 
-EPS = 1e-12
-RELEVANT_MEMORIES_COUNT = 15
+EPS = 1e-10
+RELEVANT_MEMORIES_COUNT = 10
 
 
 class KeyValueMemory(object):
@@ -169,8 +169,7 @@ class QueryMatcher(object):
         return input_query_vector, candidate_query_vectors
 
     def _calculate_term_freqs(self):
-        self.term_freqs_per_query = [
-            self._term_freqs(query) for query in self.queries]
+        self.term_freqs_per_query = [self._term_freqs(query) for query in self.queries]
 
     def _calculate_inverse_doc_freqs(self):
         idf = defaultdict(int)
