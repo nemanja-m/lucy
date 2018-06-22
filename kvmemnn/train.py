@@ -1,4 +1,6 @@
 import argparse
+import os
+import pathlib
 import time
 from collections import namedtuple
 
@@ -10,14 +12,15 @@ from tqdm import tqdm
 from visdom import Visdom
 
 from dataset import Dataset
+from definitions import MODELS_DIR
 from memory import KeyValueMemory
 from module import KVMemoryNN
 
 
-EPOCHS = 50
+EPOCHS = 100
 BATCH_SIZE = 64
-EMBEDDING_DIM = 256
-LEARNING_RATE = 1.0e-3
+EMBEDDING_DIM = 128
+LEARNING_RATE = 2.5e-3
 
 History = namedtuple('History', ['losses', 'hits'])
 
@@ -53,7 +56,7 @@ class Trainer(object):
         for epoch in range(epochs):
             self.model.train()
 
-            with tqdm(self.data.train_iter,
+            with tqdm(self.data.iterator,
                       unit=' batches',
                       desc='Epoch {:3}/{}'.format(epoch + 1, epochs)) as pb:
 
@@ -135,6 +138,17 @@ class Trainer(object):
         response = self.memory._tensor_to_tokens(best_response_tensor)
         return ' '.join(response)
 
+    def save_model(self, model_dir):
+        pathlib.Path(model_dir).mkdir(parents=True, exist_ok=True)
+        path = os.path.join(model_dir, 'kvmem_model')
+
+        print("\nSaving model to '{}'\n".format(path))
+        torch.save(self.model.state_dict(), path)
+
+    def load_model(self, model_dir):
+        path = os.path.join(model_dir, 'kvmem_model')
+        self.model.load_state_dict(torch.load(path))
+
     def _batchify(self, query):
         return self.data.process(query)
 
@@ -162,7 +176,7 @@ class Trainer(object):
                                                      EMBEDDING_DIM)
 
             return dict(kwargs,
-                        width=420,
+                        width=360,
                         height=360,
                         title='{}\t{}'.format(title, meta),
                         xlabel='Iteration',
@@ -217,11 +231,19 @@ if __name__ == '__main__':
         print('\nUsing CPU for training')
 
     trainer = Trainer(device, BATCH_SIZE)
-    trainer.train(epochs=EPOCHS)
+
+    if not args.interactive:
+        trainer.train(epochs=EPOCHS)
+        trainer.save_model(model_dir=MODELS_DIR)
 
     if args.interactive:
-        print('\n')
-        while True:
-            query = input('> ')
-            response = trainer.process(query.split(' '))
-            print(response)
+        from dataset import tokenize
+        trainer.load_model(model_dir=MODELS_DIR)
+
+        try:
+            while True:
+                query = input('Me:   ').strip()
+                response = trainer.process(tokenize(query))
+                print('Lucy: {}'.format(response))
+        except (EOFError, KeyboardInterrupt) as e:
+            print('\nShutting down...')
