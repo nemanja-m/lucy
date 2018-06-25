@@ -38,6 +38,7 @@ class KeyValueMemory(object):
     def batch_address(self, query_batch, response_batch=None, train=False):
         batch_keys = []
         batch_values = []
+        negative_candidates = []
 
         for idx in range(len(query_batch)):
             if isinstance(response_batch, torch.Tensor):
@@ -45,12 +46,16 @@ class KeyValueMemory(object):
             else:
                 query, response = query_batch[idx, :], None
 
-            keys, values = zip(*self.address(query, response, train=train))
+            keys, values, candidates = self.address(query, response, train=train)
+            # keys, values, candidates = zip(*self.address(query, response, train=train))
+
             batch_keys.extend(keys)
             batch_values.extend(values)
+            negative_candidates.extend(candidates)
 
         keys_tensor = self.process(batch_keys)
         values_tensor = self.process(batch_values)
+        candidates_tensor = self.process(negative_candidates)
 
         keys_view = keys_tensor.view(len(query_batch),
                                      RELEVANT_MEMORIES_COUNT,
@@ -59,7 +64,12 @@ class KeyValueMemory(object):
         values_view = values_tensor.view(len(query_batch),
                                          RELEVANT_MEMORIES_COUNT,
                                          values_tensor.shape[1])
-        return keys_view, values_view
+
+        candidates_view = candidates_tensor.view(len(query_batch),
+                                                 2 * RELEVANT_MEMORIES_COUNT,
+                                                 candidates_tensor.shape[1])
+
+        return keys_view, values_view, candidates_view
 
     def address(self, query, response=None, train=False):
         if len(query) == 0:
@@ -73,7 +83,17 @@ class KeyValueMemory(object):
         if self._use_cached and train:
             return self._cache[repr(query)]
 
-        return self._query_matcher.most_similar(query, response)
+        sim = self._query_matcher.most_similar(query, response)
+
+        # negs = np.random.choice(self._query_matcher.responses,
+        #                         2 * RELEVANT_MEMORIES_COUNT)
+
+        _, negs = zip(*self._query_matcher.most_similar(query,
+                                                        response,
+                                                        n=2 * RELEVANT_MEMORIES_COUNT))
+
+        queries, responses = zip(*sim)
+        return queries, responses, negs
 
     def _tensor_to_tokens(self, tensor):
         pad_token_idx = self.vocab.stoi['<pad>']
@@ -139,16 +159,17 @@ class QueryMatcher(object):
         for idx in reversed(indices):
             query = self.queries[idx]
             response = self.responses[idx]
+            relevant_memories.append((query, response))
 
             # Make sure that query - response pair is first returned memory
-            exact_match = input_response is not None \
-                and input_query == query \
-                and input_response == response
+            # exact_match = input_response is not None \
+            #     and input_query == query \
+            #     and input_response == response
 
-            if exact_match:
-                relevant_memories.insert(0, (query, response))
-            else:
-                relevant_memories.append((query, response))
+            # if exact_match:
+            #     relevant_memories.insert(0, (query, response))
+            # else:
+            #     relevant_memories.append((query, response))
         return relevant_memories
 
     def _vectorize_queries(self, input_query):

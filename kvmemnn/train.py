@@ -17,7 +17,7 @@ from memory import KeyValueMemory
 from module import KVMemoryNN
 
 
-EPOCHS = 100
+EPOCHS = 15
 BATCH_SIZE = 64
 EMBEDDING_DIM = 128
 LEARNING_RATE = 2.5e-3
@@ -27,7 +27,8 @@ History = namedtuple('History', ['losses', 'hits'])
 
 class Trainer(object):
 
-    def __init__(self, device, batch_size):
+    def __init__(self, device, batch_size, model_name='kvmemnn_model'):
+        self.model_name = model_name
         self.device = device
         self.batch_size = batch_size
 
@@ -96,12 +97,14 @@ class Trainer(object):
         return response_indices[:, :n].eq(0).sum().item() / len(response_indices)
 
     def _forward(self, batch):
-        keys_tensor, values_tensor = self.memory.batch_address(batch.query,
-                                                               batch.response,
-                                                               train=True)
+        keys_tensor, values_tensor, negs_tensor = self.memory.batch_address(batch.query,
+                                                                            batch.response,
+                                                                            train=True)
         return self.model(batch.query.to(device=self.device),
+                          batch.response.to(device=self.device),
                           keys_tensor.to(device=self.device),
-                          values_tensor.to(device=self.device))
+                          values_tensor.to(device=self.device),
+                          negs_tensor.to(device=self.device))
 
     def _make_targets(self, shape):
         targets = -torch.ones(shape, device=self.device)
@@ -121,32 +124,35 @@ class Trainer(object):
         self.model.eval()
 
         query_batch = self._batchify([query])
-        keys_tensor, values_tensor = self.memory.batch_address(query_batch,
-                                                               response_batch=None,
-                                                               train=False)
+        keys_tensor, values_tensor, negs_tensor = self.memory.batch_address(query_batch,
+                                                                            response_batch=None,
+                                                                            train=False)
 
         x_embedded, y_embedded = self.model(query_batch.to(device=self.device),
+                                            None,
                                             keys_tensor.to(device=self.device),
-                                            values_tensor.to(device=self.device))
+                                            values_tensor.to(device=self.device),
+                                            negs_tensor.to(device=self.device))
 
         predictions = self.cosine_similarity(x_embedded, y_embedded)
         _, indices = predictions.sort(descending=True)
 
         best_response_idx = indices[0][0].item()
-        best_response_tensor = values_tensor[0, best_response_idx]
+        best_response_tensor = negs_tensor[0, best_response_idx]
 
         response = self.memory._tensor_to_tokens(best_response_tensor)
         return ' '.join(response)
 
     def save_model(self, model_dir):
         pathlib.Path(model_dir).mkdir(parents=True, exist_ok=True)
-        path = os.path.join(model_dir, 'kvmem_model')
+        path = os.path.join(model_dir, self.model_name)
 
         print("\nSaving model to '{}'\n".format(path))
         torch.save(self.model.state_dict(), path)
 
     def load_model(self, model_dir):
-        path = os.path.join(model_dir, 'kvmem_model')
+        path = os.path.join(model_dir, self.model_name)
+        print("\nLoading model from '{}'\n".format(path))
         self.model.load_state_dict(torch.load(path))
 
     def _batchify(self, query):
@@ -230,7 +236,7 @@ if __name__ == '__main__':
         device = torch.device('cpu')
         print('\nUsing CPU for training')
 
-    trainer = Trainer(device, BATCH_SIZE)
+    trainer = Trainer(device, BATCH_SIZE, model_name='neg_sampling')
 
     if not args.interactive:
         trainer.train(epochs=EPOCHS)
@@ -244,6 +250,7 @@ if __name__ == '__main__':
             while True:
                 query = input('Me:   ').strip()
                 response = trainer.process(tokenize(query))
+                os.system("spd-say \"{}\"".format(response))
                 print('Lucy: {}'.format(response))
         except (EOFError, KeyboardInterrupt) as e:
             print('\nShutting down...')

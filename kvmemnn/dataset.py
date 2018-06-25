@@ -6,11 +6,12 @@ from torchtext.data import Field, TabularDataset, BucketIterator, interleave_key
 
 TRAIN_TEST_VAL_RATIO = [0.90, 0.05, 0.05]
 
+
 spacy_en = spacy.load('en', disable=['parser', 'tagger', 'entity'])
 
 
 def tokenize(text):
-    return [token.norm_ for token in spacy_en(text) if not token.is_space]
+    return [token.text for token in spacy_en.tokenizer(text) if not token.is_space]
 
 
 class Dataset(object):

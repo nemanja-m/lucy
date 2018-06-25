@@ -25,18 +25,28 @@ class KVMemoryNN(torch.nn.Module):
         self.similarity = torch.nn.CosineSimilarity(dim=2)
         self.softmax = torch.nn.Softmax(dim=2)
 
-    def forward(self, query, memory_keys, memory_values):
+    def forward(self, query, response, memory_keys, memory_values, negs):
         query_embedding = self.encode_in(query).view(len(query), 1, self._embedding_dim)
+
         memory_keys_embedding = self.encode_in(memory_keys, mean_axis=2)
-        memory_values_embedding = self.encode_out(memory_values, mean_axis=2)
+        memory_values_embedding = self.encode_in(memory_values, mean_axis=2)
 
         similarity = self.similarity(query_embedding, memory_keys_embedding).unsqueeze(1)
         softmax = self.softmax(similarity)
         value_reading = torch.matmul(softmax, memory_values_embedding)
         result = self.linear(value_reading)
 
-        x_encoded = torch.cat([result] * memory_values.shape[1], dim=1)
-        y_encoded = memory_values_embedding
+        negs_embedding = self.encode_out(negs, mean_axis=2)
+
+        if response is not None:
+            response_embedding = self.encode_out(response).view(
+                len(response), 1, self._embedding_dim)
+
+            negs_embedding[:, 0, :] = response_embedding[:, 0, :]
+
+        x_encoded = torch.cat([result] * negs.shape[1], dim=1)
+        y_encoded = negs_embedding
+
         return x_encoded, y_encoded
 
     def encode_in(self, tokens, mean_axis=1):
