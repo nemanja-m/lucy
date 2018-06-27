@@ -1,13 +1,15 @@
-import spacy
 import torch
-from definitions import DATA_PATH
+from spacy.lang.en import English
 from torchtext.data import Field, TabularDataset, BucketIterator, interleave_keys
 
+from definitions import DATA_PATH
 
+
+DEFAULT_BATCH_SIZE = 32
 TRAIN_TEST_VAL_RATIO = [0.90, 0.05, 0.05]
 
 
-spacy_en = spacy.load('en', disable=['parser', 'tagger', 'entity'])
+spacy_en = English()
 
 
 def tokenize(text):
@@ -18,7 +20,7 @@ class Dataset(object):
 
     def __init__(self, path=DATA_PATH,
                  device=torch.device('cpu'),
-                 batch_size=32,
+                 batch_size=DEFAULT_BATCH_SIZE,
                  train_test_val_ratio=TRAIN_TEST_VAL_RATIO):
 
         print('\nLoading dataset')

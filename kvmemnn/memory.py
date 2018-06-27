@@ -12,13 +12,16 @@ from definitions import MEMORY_CACHE_PATH
 
 
 EPS = 1e-10
-RELEVANT_MEMORIES_COUNT = 10
+MEMORIES_COUNT = 10
 
 
 class KeyValueMemory(object):
 
-    def __init__(self, dataset, use_cached=True):
+    def __init__(self, dataset, memories_count=MEMORIES_COUNT, use_cached=True):
         print('\nInitializing key-value memory')
+
+        self._memories_count = memories_count
+        self._candidates_count = memories_count * 2
 
         self._use_cached = use_cached
         self._query_matcher = QueryMatcher(dataset.data.examples)
@@ -35,20 +38,14 @@ class KeyValueMemory(object):
                 print(' - Computing queries memory cache\n')
                 self._precompute_memories(dataset)
 
-    def batch_address(self, query_batch, response_batch=None, train=False):
+    def batch_address(self, query_batch, train=False):
         batch_keys = []
         batch_values = []
         negative_candidates = []
 
         for idx in range(len(query_batch)):
-            if isinstance(response_batch, torch.Tensor):
-                query, response = query_batch[idx, :], response_batch[idx, :]
-            else:
-                query, response = query_batch[idx, :], None
-
-            keys, values, candidates = self.address(query, response, train=train)
-            # keys, values, candidates = zip(*self.address(query, response, train=train))
-
+            query = query_batch[idx, :]
+            keys, values, candidates = self.address(query, train=train)
             batch_keys.extend(keys)
             batch_values.extend(values)
             negative_candidates.extend(candidates)
@@ -58,42 +55,42 @@ class KeyValueMemory(object):
         candidates_tensor = self.process(negative_candidates)
 
         keys_view = keys_tensor.view(len(query_batch),
-                                     RELEVANT_MEMORIES_COUNT,
+                                     self._memories_count,
                                      keys_tensor.shape[1])
 
         values_view = values_tensor.view(len(query_batch),
-                                         RELEVANT_MEMORIES_COUNT,
+                                         self._memories_count,
                                          values_tensor.shape[1])
 
         candidates_view = candidates_tensor.view(len(query_batch),
-                                                 2 * RELEVANT_MEMORIES_COUNT,
+                                                 self._candidates_count,
                                                  candidates_tensor.shape[1])
 
         return keys_view, values_view, candidates_view
 
-    def address(self, query, response=None, train=False):
+    def address(self, query, train=False, random_candidates=False):
         if len(query) == 0:
             raise KeyError('Query is empty')
 
         if isinstance(query, torch.Tensor):
             query = self._tensor_to_tokens(query)
-            if response is not None:
-                response = self._tensor_to_tokens(response)
 
         if self._use_cached and train:
             return self._cache[repr(query)]
 
-        sim = self._query_matcher.most_similar(query, response)
+        queries, responses = zip(*self._query_matcher.most_similar(query))
+        candidates = self._get_response_candidates(query, random=random_candidates)
 
-        # negs = np.random.choice(self._query_matcher.responses,
-        #                         2 * RELEVANT_MEMORIES_COUNT)
+        return queries, responses, candidates
 
-        _, negs = zip(*self._query_matcher.most_similar(query,
-                                                        response,
-                                                        n=2 * RELEVANT_MEMORIES_COUNT))
+    def _get_response_candidates(self, query, random=True):
+        if random:
+            return np.random.choice(self._query_matcher.responses, self._candidates_count)
 
-        queries, responses = zip(*sim)
-        return queries, responses, negs
+        # In test time, candidates are responses from most similar queries
+        _, candidates = zip(*self._query_matcher.most_similar(query, n=self._candidates_count))
+
+        return candidates
 
     def _tensor_to_tokens(self, tensor):
         pad_token_idx = self.vocab.stoi['<pad>']
@@ -102,8 +99,8 @@ class KeyValueMemory(object):
     def _precompute_memories(self, dataset, out_file=MEMORY_CACHE_PATH):
         cache = {}
         for example in tqdm(dataset.data.examples):
-            query, response = example.query, example.response
-            memories = self.address(query, response)
+            query = example.query
+            memories = self.address(query, random_candidates=True)
             cache[repr(query)] = memories
 
         with open(out_file, 'wb') as fp:
@@ -130,7 +127,7 @@ class QueryMatcher(object):
         print(' - Calculating inverse document frequencies')
         self._calculate_inverse_doc_freqs()
 
-    def most_similar(self, input_query, input_response=None, n=RELEVANT_MEMORIES_COUNT):
+    def most_similar(self, input_query, n=MEMORIES_COUNT):
         input_query_vector, candidate_query_vectors = self._vectorize_queries(input_query)
 
         use_cosine_similarity = len(input_query) > 1
@@ -155,22 +152,10 @@ class QueryMatcher(object):
         similarities = similarities.squeeze()
         indices = similarities.argsort()[-n:]
 
-        relevant_memories = []
-        for idx in reversed(indices):
-            query = self.queries[idx]
-            response = self.responses[idx]
-            relevant_memories.append((query, response))
-
-            # Make sure that query - response pair is first returned memory
-            # exact_match = input_response is not None \
-            #     and input_query == query \
-            #     and input_response == response
-
-            # if exact_match:
-            #     relevant_memories.insert(0, (query, response))
-            # else:
-            #     relevant_memories.append((query, response))
-        return relevant_memories
+        return [
+            (self.queries[idx], self.responses[idx])
+            for idx in reversed(indices)
+        ]
 
     def _vectorize_queries(self, input_query):
         input_query_vector = np.zeros((len(input_query), 1))

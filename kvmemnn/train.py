@@ -14,10 +14,10 @@ from visdom import Visdom
 from dataset import Dataset
 from definitions import MODELS_DIR
 from memory import KeyValueMemory
-from module import KVMemoryNN
+from module import KeyValueMemoryNet
 
 
-EPOCHS = 15
+EPOCHS = 20
 BATCH_SIZE = 64
 EMBEDDING_DIM = 128
 LEARNING_RATE = 2.5e-3
@@ -28,15 +28,15 @@ History = namedtuple('History', ['losses', 'hits'])
 class Trainer(object):
 
     def __init__(self, device, batch_size, model_name='kvmemnn_model'):
-        self.model_name = model_name
         self.device = device
         self.batch_size = batch_size
+        self.model_name = model_name
 
         self.data = Dataset(batch_size=BATCH_SIZE)
         self.memory = KeyValueMemory(self.data)
 
-        self.model = KVMemoryNN(embedding_dim=EMBEDDING_DIM,
-                                vocab_size=len(self.data.vocab)).to(device=device)
+        self.model = KeyValueMemoryNet(embedding_dim=EMBEDDING_DIM,
+                                       vocab_size=len(self.data.vocab)).to(device=device)
 
         self.loss_criterion = CosineEmbeddingLoss(margin=0.1,
                                                   size_average=False).to(device=device)
@@ -64,9 +64,11 @@ class Trainer(object):
                 for batch in pb:
                     self.optimizer.zero_grad()
 
-                    x_embedded, y_embedded = self._forward(batch)
-                    targets = self._make_targets(shape=x_embedded.shape[:2])
-                    loss = self._compute_loss(x_embedded, y_embedded, targets)
+                    x, y = self._forward(query_batch=batch.query,
+                                         response_batch=batch.response)
+
+                    targets = self._make_targets(shape=x.shape[:2])
+                    loss = self._compute_loss(x, y, targets)
                     loss.backward()
 
                     self.optimizer.step()
@@ -84,8 +86,10 @@ class Trainer(object):
         with torch.no_grad():
             hits = []
             for batch in self.data.validation_iter:
-                x_embedded, y_embedded = self._forward(batch)
-                predictions = self.cosine_similarity(x_embedded, y_embedded)
+                x, y = self._forward(query_batch=batch.query,
+                                     response_batch=batch.response)
+
+                predictions = self.cosine_similarity(x, y)
                 _, indices = predictions.sort(descending=True)
 
                 hits.append([self._hits_at_n(indices, n) for n in (1, 5, 10)])
@@ -96,19 +100,18 @@ class Trainer(object):
     def _hits_at_n(self, response_indices, n):
         return response_indices[:, :n].eq(0).sum().item() / len(response_indices)
 
-    def _forward(self, batch):
-        keys_tensor, values_tensor, negs_tensor = self.memory.batch_address(batch.query,
-                                                                            batch.response,
-                                                                            train=True)
-        return self.model(batch.query.to(device=self.device),
-                          batch.response.to(device=self.device),
-                          keys_tensor.to(device=self.device),
-                          values_tensor.to(device=self.device),
-                          negs_tensor.to(device=self.device))
+    def _forward(self, query_batch, response_batch, train=True):
+        keys, values, candidates = self.memory.batch_address(query_batch, train=train)
+
+        return self.model(query_batch.to(device=self.device),
+                          response_batch.to(device=self.device),
+                          keys.to(device=self.device),
+                          values.to(device=self.device),
+                          candidates.to(device=self.device))
 
     def _make_targets(self, shape):
         targets = -torch.ones(shape, device=self.device)
-        targets[:, 0] = 1  # First memory is input query and response
+        targets[:, 0] = 1  # First candidate response is correct one
         return targets
 
     def _compute_loss(self, x, y, targets):
@@ -124,21 +127,19 @@ class Trainer(object):
         self.model.eval()
 
         query_batch = self._batchify([query])
-        keys_tensor, values_tensor, negs_tensor = self.memory.batch_address(query_batch,
-                                                                            response_batch=None,
-                                                                            train=False)
+        keys, values, candidates = self.memory.batch_address(query_batch, train=False)
 
-        x_embedded, y_embedded = self.model(query_batch.to(device=self.device),
-                                            None,
-                                            keys_tensor.to(device=self.device),
-                                            values_tensor.to(device=self.device),
-                                            negs_tensor.to(device=self.device))
+        x, y = self.model(query_batch.to(device=self.device),
+                          None,
+                          keys.to(device=self.device),
+                          values.to(device=self.device),
+                          candidates.to(device=self.device))
 
-        predictions = self.cosine_similarity(x_embedded, y_embedded)
+        predictions = self.cosine_similarity(x, y)
         _, indices = predictions.sort(descending=True)
 
         best_response_idx = indices[0][0].item()
-        best_response_tensor = negs_tensor[0, best_response_idx]
+        best_response_tensor = candidates[0, best_response_idx]
 
         response = self.memory._tensor_to_tokens(best_response_tensor)
         return ' '.join(response)
@@ -236,7 +237,7 @@ if __name__ == '__main__':
         device = torch.device('cpu')
         print('\nUsing CPU for training')
 
-    trainer = Trainer(device, BATCH_SIZE, model_name='neg_sampling')
+    trainer = Trainer(device, BATCH_SIZE, model_name='lucy')
 
     if not args.interactive:
         trainer.train(epochs=EPOCHS)
@@ -250,7 +251,6 @@ if __name__ == '__main__':
             while True:
                 query = input('Me:   ').strip()
                 response = trainer.process(tokenize(query))
-                os.system("spd-say \"{}\"".format(response))
                 print('Lucy: {}'.format(response))
         except (EOFError, KeyboardInterrupt) as e:
             print('\nShutting down...')
