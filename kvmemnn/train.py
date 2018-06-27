@@ -43,6 +43,7 @@ class Trainer(object):
 
         self.cosine_similarity = CosineSimilarity(dim=2)
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.hits = (1, 5, 10)
 
         self._init_visdom()
 
@@ -50,8 +51,8 @@ class Trainer(object):
         print('Starting training')
         print(' - Epochs {}'.format(epochs))
         print(' - Batches: {}'.format(len(self.data.train_iter)))
-        print(' - Batch size: {}\n'.format(self.batch_size))
-        print(' - Learning rate: {}\n'.format(self.learning_rate))
+        print(' - Batch size: {}'.format(self.batch_size))
+        print(' - Learning rate: {}'.format(self.learning_rate))
         print(' - Embedding dim: {}\n'.format(self.embedding_dim))
 
         self._init_history(epochs)
@@ -94,7 +95,7 @@ class Trainer(object):
                 predictions = self.cosine_similarity(x, y)
                 _, indices = predictions.sort(descending=True)
 
-                hits.append([self._hits_at_n(indices, n) for n in (1, 5, 10)])
+                hits.append([self._hits_at_n(indices, n) for n in self.hits])
 
             mean_hits = np.array(hits).mean(axis=0)
             self.history.hits[epoch] = mean_hits
@@ -144,8 +145,14 @@ class Trainer(object):
             time.sleep(step)
             startup_time -= step
 
-        assert self.visdom.check_connection(), "Can't connect to visdom server. " \
-                                               "Start it with 'python -m visdom.server'"
+        if not self.visdom.check_connection():
+            self._visdom_detected = False
+
+            print("Can't connect to visdom server.")
+            print("Start it with 'python -m visdom.server'\n")
+            return
+
+        self._visdom_detected = True
 
         def plot_options(title, ylabel, **kwargs):
             meta = 'lr: {} batch: {} emb: {}'.format(LEARNING_RATE,
@@ -153,27 +160,31 @@ class Trainer(object):
                                                      EMBEDDING_DIM)
 
             return dict(kwargs,
-                        width=360,
+                        width=380,
                         height=360,
                         title='{}\t{}'.format(title, meta),
                         xlabel='Iteration',
                         ylabel=ylabel)
 
+        loss_options = plot_options(title='Train Loss', ylabel='Loss')
         self.loss_window = self.visdom.line(Y=np.array([1]),
                                             X=np.array([0]),
-                                            opts=plot_options(title='Train Loss',
-                                                              ylabel='Loss'))
+                                            opts=loss_options)
+
+        hits_legend = ['hits@' + hit for hit in self.hits]
+        hits_options = plot_options(title='hits@n',
+                                    ylabel='%',
+                                    showlegend=True,
+                                    legend=hits_legend)
 
         self.hits_window = self.visdom.line(Y=np.zeros((1, 3)),
                                             X=np.zeros((1, 3)),
-                                            opts=plot_options(title='hits@n',
-                                                              ylabel='%',
-                                                              showlegend=True,
-                                                              legend=['hits@1',
-                                                                      'hits@5',
-                                                                      'hits@10']))
+                                            opts=hits_options)
 
     def _update_visdom(self, epoch):
+        if not self._visdom_detected:
+            return
+
         mean_loss = np.mean(self.history.losses[epoch])
         self.visdom.line(Y=np.array([mean_loss]),
                          X=np.array([epoch]),
