@@ -203,9 +203,8 @@ if __name__ == '__main__':
 
     while True:
         print()
-        query = input('> ')
-        key = query.split(' ')
-        memories = kv_memory.address(key)
-        for key, value in memories:
+        query = input('> ').strip().split()
+        queries, responses, _ = kv_memory.address(query)
+        for key, value in zip(queries, responses):
             print('{} : {}'.format(' '.join(key),
                                    ' '.join(value)))

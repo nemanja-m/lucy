@@ -49,7 +49,7 @@ class Encoder(Module):
 
         self.embedding = Embedding(num_embeddings=num_embeddings,
                                    embedding_dim=embedding_dim,
-                                   scale_grad_by_freq=True,
+                                   max_norm=5,
                                    padding_idx=1)
 
     def forward(self, tokens, mean_axis=1):

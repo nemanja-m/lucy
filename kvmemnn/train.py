@@ -1,6 +1,5 @@
 import argparse
 import os
-import pathlib
 import time
 from collections import namedtuple
 
@@ -17,7 +16,7 @@ from memory import KeyValueMemory
 from module import KeyValueMemoryNet
 
 
-EPOCHS = 20
+EPOCHS = 10
 BATCH_SIZE = 64
 EMBEDDING_DIM = 128
 LEARNING_RATE = 2.5e-3
@@ -27,22 +26,23 @@ History = namedtuple('History', ['losses', 'hits'])
 
 class Trainer(object):
 
-    def __init__(self, device, batch_size, model_name='kvmemnn_model'):
+    def __init__(self, device, batch_size, learning_rate, embedding_dim):
         self.device = device
         self.batch_size = batch_size
-        self.model_name = model_name
+        self.learning_rate = learning_rate
+        self.embedding_dim = embedding_dim
 
         self.data = Dataset(batch_size=BATCH_SIZE)
         self.memory = KeyValueMemory(self.data)
 
-        self.model = KeyValueMemoryNet(embedding_dim=EMBEDDING_DIM,
+        self.model = KeyValueMemoryNet(embedding_dim=embedding_dim,
                                        vocab_size=len(self.data.vocab)).to(device=device)
 
         self.loss_criterion = CosineEmbeddingLoss(margin=0.1,
                                                   size_average=False).to(device=device)
 
         self.cosine_similarity = CosineSimilarity(dim=2)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
         self._init_visdom()
 
@@ -51,6 +51,8 @@ class Trainer(object):
         print(' - Epochs {}'.format(epochs))
         print(' - Batches: {}'.format(len(self.data.train_iter)))
         print(' - Batch size: {}\n'.format(self.batch_size))
+        print(' - Learning rate: {}\n'.format(self.learning_rate))
+        print(' - Embedding dim: {}\n'.format(self.embedding_dim))
 
         self._init_history(epochs)
 
@@ -123,41 +125,9 @@ class Trainer(object):
         ])
         return torch.sum(cosine_embedding_losses) / len(x)
 
-    def process(self, query):
-        self.model.eval()
-
-        query_batch = self._batchify([query])
-        keys, values, candidates = self.memory.batch_address(query_batch, train=False)
-
-        x, y = self.model(query_batch.to(device=self.device),
-                          None,
-                          keys.to(device=self.device),
-                          values.to(device=self.device),
-                          candidates.to(device=self.device))
-
-        predictions = self.cosine_similarity(x, y)
-        _, indices = predictions.sort(descending=True)
-
-        best_response_idx = indices[0][0].item()
-        best_response_tensor = candidates[0, best_response_idx]
-
-        response = self.memory._tensor_to_tokens(best_response_tensor)
-        return ' '.join(response)
-
-    def save_model(self, model_dir):
-        pathlib.Path(model_dir).mkdir(parents=True, exist_ok=True)
-        path = os.path.join(model_dir, self.model_name)
-
+    def save_model(self, path):
         print("\nSaving model to '{}'\n".format(path))
         torch.save(self.model.state_dict(), path)
-
-    def load_model(self, model_dir):
-        path = os.path.join(model_dir, self.model_name)
-        print("\nLoading model from '{}'\n".format(path))
-        self.model.load_state_dict(torch.load(path))
-
-    def _batchify(self, query):
-        return self.data.process(query)
 
     def _init_history(self, epochs):
         # Save loss history for each epoch
@@ -219,14 +189,39 @@ class Trainer(object):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Key-Value Memory Network on ALICE bot data')
-    parser.add_argument('--cpu', action='store_true',
+    parser.add_argument('--cpu',
+                        action='store_true',
                         help='Disable CUDA training and train on CPU')
-    parser.add_argument('-i', '--interactive', action='store_true',
+
+    parser.add_argument('-b', '--batch',
+                        type=int,
+                        default=BATCH_SIZE,
+                        help='Training batch size')
+
+    parser.add_argument('-d', '--embedding_dim',
+                        type=int,
+                        default=EMBEDDING_DIM,
+                        help='Embedding dimension')
+
+    parser.add_argument('-e', '--epochs',
+                        type=int,
+                        default=EPOCHS,
+                        help='Number of training epochs')
+
+    parser.add_argument('-lr', '--learning_rate',
+                        type=int,
+                        default=LEARNING_RATE,
+                        help='Learning rate')
+
+    parser.add_argument('-w', '--weights_path',
+                        type=str,
+                        default=os.path.join(MODELS_DIR, 'lucy'),
                         help='Turn on interactive mode after training')
+
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+def main():
     args = parse_args()
 
     if torch.cuda.is_available() and not args.cpu:
@@ -237,20 +232,14 @@ if __name__ == '__main__':
         device = torch.device('cpu')
         print('\nUsing CPU for training')
 
-    trainer = Trainer(device, BATCH_SIZE, model_name='lucy')
+    trainer = Trainer(device,
+                      batch_size=args.batch,
+                      learning_rate=args.learning_rate,
+                      embedding_dim=args.embedding_dim)
 
-    if not args.interactive:
-        trainer.train(epochs=EPOCHS)
-        trainer.save_model(model_dir=MODELS_DIR)
+    trainer.train(epochs=args.epochs)
+    trainer.save_model(path=args.weights_path)
 
-    if args.interactive:
-        from dataset import tokenize
-        trainer.load_model(model_dir=MODELS_DIR)
 
-        try:
-            while True:
-                query = input('Me:   ').strip()
-                response = trainer.process(tokenize(query))
-                print('Lucy: {}'.format(response))
-        except (EOFError, KeyboardInterrupt) as e:
-            print('\nShutting down...')
+if __name__ == '__main__':
+    main()
