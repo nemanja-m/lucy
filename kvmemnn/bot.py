@@ -69,11 +69,11 @@ def main():
 
     try:
         while True:
-            query = input('{:>5}: '.format('Me')).strip()
+            query = input('\033[1;32m{:>5}:\033[0m '.format('Me')).strip()
             query = tokenize(query)
 
             response = lucy_bot.respond(query)
-            print('{:>5}: {}'.format('Lucy', response))
+            print('\033[1;31m{:>5}:\033[0m {}'.format('Lucy', response))
 
     except (EOFError, KeyboardInterrupt) as e:
         print('\n\nShutting down')
