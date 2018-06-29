@@ -9,10 +9,10 @@ ipdb = "*"
 [packages]
 torch = "==0.4.0"
 numpy = "*"
-spacy = "*"
 tqdm = "*"
 visdom = "*"
 torchtext = {editable = true, git = "https://github.com/pytorch/text.git"}
+revtok = "*"
 
 [requires]
 python_version = "3.5"

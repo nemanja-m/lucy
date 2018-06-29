@@ -1,5 +1,4 @@
 import torch
-from spacy.lang.en import English
 from torchtext.data import Field, TabularDataset, BucketIterator, interleave_keys
 
 from definitions import DATA_PATH
@@ -7,13 +6,6 @@ from definitions import DATA_PATH
 
 DEFAULT_BATCH_SIZE = 32
 TRAIN_TEST_VAL_RATIO = [0.90, 0.05, 0.05]
-
-
-spacy_en = English()
-
-
-def tokenize(text):
-    return [token.text for token in spacy_en.tokenizer(text) if not token.is_space]
 
 
 class Dataset(object):
@@ -28,7 +20,7 @@ class Dataset(object):
         self._batch_size = batch_size
         self._device = device
 
-        self._field = Field(tokenize=tokenize,
+        self._field = Field(tokenize='revtok',
                             lower=True,
                             batch_first=True)
 

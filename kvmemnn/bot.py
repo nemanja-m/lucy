@@ -2,9 +2,10 @@ import argparse
 import os
 
 import torch
+import revtok
 from torch.nn import CosineSimilarity
 
-from dataset import Dataset, tokenize
+from dataset import Dataset
 from definitions import MODELS_DIR
 from memory import KeyValueMemory
 from module import KeyValueMemoryNet
@@ -45,9 +46,8 @@ class LucyBot(object):
 
         best_response_idx = indices[0][0].item()
         best_response_tensor = candidates[0, best_response_idx]
-
         response = self.memory._tensor_to_tokens(best_response_tensor)
-        return ' '.join(response)
+        return revtok.detokenize(response)
 
     def _batchify(self, query):
         return self.data.process(query)
@@ -70,7 +70,7 @@ def main():
     try:
         while True:
             query = input('\033[1;32m{:>5}:\033[0m '.format('Me')).strip()
-            query = tokenize(query)
+            query = revtok.tokenize(query)
 
             response = lucy_bot.respond(query)
             print('\033[1;31m{:>5}:\033[0m {}'.format('Lucy', response))
