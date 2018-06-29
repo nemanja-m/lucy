@@ -105,3 +105,6 @@ venv.bak/
 
 # pretraiend word vectors cache
 .vector_cache/
+
+# Temp files
+/tmp
