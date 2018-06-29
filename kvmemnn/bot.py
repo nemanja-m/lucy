@@ -1,58 +1,9 @@
 import argparse
 import os
 
-import torch
-import revtok
-from torch.nn import CosineSimilarity
-
-from dataset import Dataset
-from definitions import MODELS_DIR
-from memory import KeyValueMemory
-from module import KeyValueMemoryNet
 from colors import colorize
-
-
-EMBEDDING_DIM = 128
-
-
-class LucyBot(object):
-
-    def __init__(self, model_path):
-        self.data = Dataset()
-        self.memory = KeyValueMemory(self.data)
-        self.cosine_similarity = CosineSimilarity(dim=2)
-        self._load_model(model_path)
-
-    def _load_model(self, model_path):
-        self.model = KeyValueMemoryNet(embedding_dim=EMBEDDING_DIM,
-                                       vocab_size=len(self.data.vocab))
-
-        print("Loading model from '{}'\n".format(colorize(model_path, color='white')))
-        self.model.load_state_dict(torch.load(model_path))
-
-    def respond(self, query):
-        self.model.eval()
-
-        query_tokens = revtok.tokenize(query)
-        query_batch = self._batchify([query_tokens])
-        keys, values, candidates = self.memory.batch_address(query_batch, train=False)
-
-        x, y = self.model(query=query_batch,
-                          response=None,
-                          memory_keys=keys,
-                          memory_values=values,
-                          candidates=candidates)
-
-        predictions = self.cosine_similarity(x, y)
-        _, indices = predictions.sort(descending=True)
-
-        best_response_idx = indices[0][0].item()
-        best_response_tensor = candidates[0, best_response_idx]
-        response = self.memory._tensor_to_tokens(best_response_tensor)
-        return revtok.detokenize(response)
-
-    def _batchify(self, query):
-        return self.data.process(query)
+from core import Lucy
+from definitions import MODELS_DIR
 
 
 def parse_args():
@@ -65,7 +16,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    lucy_bot = LucyBot(args.model)
+    lucy_bot = Lucy(model_path=args.model)
 
     print('Starting Lucy. Press {} to exit\n'.format(colorize('CTRL + C',
                                                               color='white')))

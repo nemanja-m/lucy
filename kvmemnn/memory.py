@@ -106,7 +106,7 @@ class KeyValueMemory(object):
 
         with open(out_file, 'wb') as fp:
             pickle.dump(cache, fp, protocol=pickle.HIGHEST_PROTOCOL)
-            print('{}{}'.format(colorize('\nCache saved to'),
+            print('{}{}'.format(colorize('\nCache saved to '),
                                 colorize("'{}'\n".format(out_file), color='white')))
 
         self._cache = cache

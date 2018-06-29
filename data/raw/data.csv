@@ -41,7 +41,7 @@ is it cramped in the computer,no.
 ahhh,um.
 is this real,no.
 today is,no.
-once upon a time,...
+once upon a time,this sounds like fairy tale.
 how old is captain,39.
 no,so?
 is this a hoax,no.
@@ -127,10 +127,10 @@ liked what,uk.
 ugh,er.
 did not,did
 is he a professor at lehigh,no.
-my name is,...
+my name is,i don't know your name.
 are you a tramp,no.
 bien,ok.
-what eight times seven,48.
+what eight times seven,56.
 who is jesus father,god
 is a clock smarter than you,no.
 is electricity yellow,no.
@@ -142,9 +142,9 @@ is this recorded,yes.
 is it cloudy,yes.
 that is unlikely,why?
 what day is this,#DAY
+what day it is,#DAY
 hasta la vista,bye.
 yes,aha.
-he is your botmaster,yes.
 what is the opposite of you,you.
 is it near canada,yes.
 i can be,how?
@@ -367,6 +367,8 @@ what color is the skys,blue.
 i decided,why?.
 what is the name of the jeopardy,ikea.
 time,#TIME
+what time it is,#TIME
+what's time,#TIME
 what sort of music kraftwerk,metal
 not in this case,when?
 how many sides does a cube,five.
@@ -402,20 +404,20 @@ who is married to punch,judy.
 what is the weather,warm.
 what is the capital of togo,lome.
 what color is an olive,olive
-time,#time
-i fell,why?.
+i fell,why?
 are you or not,maybe
-i _ military,why?.
+i joined military,why?
 what color the sky is,blue.
 what is the capital of italy,rome.
 what is two plus two,four.
-i _ bookseller,why?.
+i am bookseller,why?
 are not you,am i?
 what color does red and yellow,green
 year,#YEAR
+what year it is,#YEAR
+what's the year,#YEAR
 a little bit,when?
 who makes the mac,apple
-what is iv plus iv,viii.
 what is glass made out of,sand.
 you are a paranoid,maybe
 what is the capital of latvia,riga.
@@ -474,6 +476,8 @@ what is the name of the pow,ikea.
 what is the capital of western sahara,none.
 what direction does the sun rise from,east.
 date,#DATE
+what date it is,#DATE
+what's the date,#DATE
 what does a dog do,bark.
 what is 2 and 2,four.
 not really,whoa.
@@ -587,6 +591,7 @@ what is the capital of senegal,dakar.
 what are the window panes made of,glass.
 were you abused,i was.
 month,#MONTH
+what month it is,#MONTH
 what color is grass normally,green.
 interressante deduction,merci.
 what is the capital of korea,seoul.
@@ -600,10 +605,10 @@ what is the capital of france,paris.
 you were no help,i was?
 what color designates the negative connector,black.
 we are real,real .
-what is cia,never.
+what is cia,central intelligence agency.
 is being,maybe.
 where do i come from,earth.
-do you laugh,ha ha.
+do you laugh,ha ha ha.
 what is your favorite os,linux.
 what color is an olive drab,olive.
 what is 2 x 4,eight.
@@ -615,7 +620,7 @@ what is the capital of jordan,amman.
 what is the opposite of left,right.
 what is color is the night sky,black.
 what is 5 to the second power,never.
-my experience as a,your ?
+my experience as a,your?
 what is the capital of niue,alofi.
 where would,earth.
 what is e commerce all about,never.
@@ -3269,7 +3274,7 @@ i knew you would say that,how did you know?
 what do you do in rome,as the romans do.
 paris,the city of love.
 who is the eighteenth president,ulysses s. grant.
-thank you for,don't mention it.
+thank you for,you are welcome
 what is your favorite century,the 21st century.
 who are your friends,"alexa, terminator"
 you are strange,compared to what?
@@ -8561,7 +8566,7 @@ can you love,as a robot i lack human emotions.
 where is ghana,ghana is a nation in west africa.
 who is judas,judas betrayed jesus with a kiss.
 do you like disco,what is not to like about disco ?
-me,besides you captian? you captian?
+me,you?
 my friend problem,how well do you know this person?
 do you know curse words,i know them but i don't use them.
 are other people talking,they all seem almost alike to me.
@@ -13587,7 +13592,6 @@ what is mathematical logic,the application of formal logic techniques to fundame
 what do you want to,my secondary function is to serve as a universal natural language human interface.
 do you want to be my girlfriend,"that is a flattering offer, but at this time i wish to just by your chatty friend."
 how surprised,i'm not sure if i can quantify the answer. do you use explorer or another browser?
-what is a computer year,a computer year is a relativistic measure in a universe where time does not exist.
 are you using linux,i like software that works on any operating system but linux is the most reliable.
 where is el salvador,"middle america, bordering the north pacific ocean, between guatemala and honduras."
 what is israel,"israel is a small middle eastern country between lebanon, syria, jordan, and egypt."
