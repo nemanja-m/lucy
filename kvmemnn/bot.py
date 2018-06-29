@@ -9,6 +9,7 @@ from dataset import Dataset
 from definitions import MODELS_DIR
 from memory import KeyValueMemory
 from module import KeyValueMemoryNet
+from colors import colorize
 
 
 EMBEDDING_DIM = 128
@@ -26,13 +27,14 @@ class LucyBot(object):
         self.model = KeyValueMemoryNet(embedding_dim=EMBEDDING_DIM,
                                        vocab_size=len(self.data.vocab))
 
-        print("Loading model from '{}'\n".format(model_path))
+        print("Loading model from '{}'\n".format(colorize(model_path, color='white')))
         self.model.load_state_dict(torch.load(model_path))
 
     def respond(self, query):
         self.model.eval()
 
-        query_batch = self._batchify([query])
+        query_tokens = revtok.tokenize(query)
+        query_batch = self._batchify([query_tokens])
         keys, values, candidates = self.memory.batch_address(query_batch, train=False)
 
         x, y = self.model(query=query_batch,
@@ -65,15 +67,17 @@ def main():
     args = parse_args()
     lucy_bot = LucyBot(args.model)
 
-    print('Starting Lucy. Press CTRL + C to exit\n')
+    print('Starting Lucy. Press {} to exit\n'.format(colorize('CTRL + C',
+                                                              color='white')))
 
     try:
         while True:
-            query = input('\033[1;32m{:>5}:\033[0m '.format('Me')).strip()
-            query = revtok.tokenize(query)
+            prompt = colorize('{:>5}: '.format('Me'))
+            query = input(prompt).strip()
 
             response = lucy_bot.respond(query)
-            print('\033[1;31m{:>5}:\033[0m {}'.format('Lucy', response))
+            lucy_prompt = colorize('{:>5}:'.format('Lucy'), color='red')
+            print('{} {}'.format(lucy_prompt, response))
 
     except (EOFError, KeyboardInterrupt) as e:
         print('\n\nShutting down')

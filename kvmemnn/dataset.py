@@ -1,6 +1,7 @@
 import torch
 from torchtext.data import Field, TabularDataset, BucketIterator, interleave_keys
 
+from colors import colorize
 from definitions import DATA_PATH
 
 
@@ -15,7 +16,7 @@ class Dataset(object):
                  batch_size=DEFAULT_BATCH_SIZE,
                  train_test_val_ratio=TRAIN_TEST_VAL_RATIO):
 
-        print('\nLoading dataset')
+        print(colorize('\nLoading dataset'))
 
         self._batch_size = batch_size
         self._device = device
@@ -53,7 +54,7 @@ class Dataset(object):
             device=self._device
         )
 
-        print(' - Building vocabulary')
+        print(colorize(' • Building vocabulary', color='yellow'))
         self._field.build_vocab(self.data)
         self.vocab = self._field.vocab
 

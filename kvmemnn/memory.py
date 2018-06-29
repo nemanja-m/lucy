@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from colors import colorize
 from definitions import MEMORY_CACHE_PATH
 
 
@@ -18,7 +19,7 @@ MEMORIES_COUNT = 10
 class KeyValueMemory(object):
 
     def __init__(self, dataset, memories_count=MEMORIES_COUNT, use_cached=True):
-        print('\nInitializing key-value memory')
+        print(colorize('\nInitializing key-value memory'))
 
         self._memories_count = memories_count
         self._candidates_count = memories_count * 2
@@ -31,11 +32,11 @@ class KeyValueMemory(object):
 
         if use_cached:
             if os.path.isfile(MEMORY_CACHE_PATH):
-                print(' - Queries memory cache loaded\n')
+                print(colorize(' • Queries memory cache loaded\n', color='yellow'))
                 with open(MEMORY_CACHE_PATH, 'rb') as fp:
                     self._cache = pickle.load(fp)
             else:
-                print(' - Computing queries memory cache\n')
+                print(colorize(' • Computing queries memory cache\n', color='yellow'))
                 self._precompute_memories(dataset)
 
     def batch_address(self, query_batch, train=False):
@@ -105,7 +106,8 @@ class KeyValueMemory(object):
 
         with open(out_file, 'wb') as fp:
             pickle.dump(cache, fp, protocol=pickle.HIGHEST_PROTOCOL)
-            print('\n - Cache saved to \'{}\'\n'.format(out_file))
+            print('{}{}'.format(colorize('\nCache saved to'),
+                                colorize("'{}'\n".format(out_file), color='white')))
 
         self._cache = cache
 
@@ -121,10 +123,10 @@ class QueryMatcher(object):
 
         self._tokens = set(itertools.chain.from_iterable(self.queries))
 
-        print(' - Calculating term frequencies')
+        print(colorize(' • Calculating term frequencies', color='yellow'))
         self._calculate_term_freqs()
 
-        print(' - Calculating inverse document frequencies')
+        print(colorize(' • Calculating inverse document frequencies', color='yellow'))
         self._calculate_inverse_doc_freqs()
 
     def most_similar(self, input_query, n=MEMORIES_COUNT):
