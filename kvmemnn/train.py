@@ -11,7 +11,7 @@ from tqdm import tqdm
 from visdom import Visdom
 
 from dataset import Dataset
-from definitions import MODELS_DIR
+from constants import MODELS_DIR
 from memory import KeyValueMemory
 from module import KeyValueMemoryNet
 

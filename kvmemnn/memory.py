@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 
 from colors import colorize
-from definitions import MEMORY_CACHE_PATH
+from constants import MEMORY_CACHE_PATH
 
 
 EPS = 1e-10

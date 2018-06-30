@@ -2,7 +2,7 @@ import torch
 from torchtext.data import Field, TabularDataset, BucketIterator, interleave_keys
 
 from colors import colorize
-from definitions import DATA_PATH
+from constants import DATA_PATH
 
 
 DEFAULT_BATCH_SIZE = 32

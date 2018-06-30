@@ -3,7 +3,7 @@ import os
 
 from colors import colorize
 from core import Lucy
-from definitions import MODELS_DIR
+from constants import MODELS_DIR
 
 
 def parse_args():
