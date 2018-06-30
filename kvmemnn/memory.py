@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 
 from colors import colorize
-from constants import MEMORY_CACHE_PATH
+from constants import MEMORY_CACHE_PATH, TFIDF_CACHE_PATH
 
 
 EPS = 1e-10
@@ -18,26 +18,14 @@ MEMORIES_COUNT = 10
 
 class KeyValueMemory(object):
 
-    def __init__(self, dataset, memories_count=MEMORIES_COUNT, use_cached=True):
+    def __init__(self, dataset, memories_count=MEMORIES_COUNT, cache_path=MEMORY_CACHE_PATH):
         print(colorize('\nInitializing key-value memory'))
 
+        self._dataset = dataset
         self._memories_count = memories_count
         self._candidates_count = memories_count * 2
-
-        self._use_cached = use_cached
         self._query_matcher = QueryMatcher(dataset.data.examples)
-
-        self.vocab = dataset.vocab
-        self.process = dataset.process
-
-        if use_cached:
-            if os.path.isfile(MEMORY_CACHE_PATH):
-                print(colorize(' • Queries memory cache loaded\n', color='yellow'))
-                with open(MEMORY_CACHE_PATH, 'rb') as fp:
-                    self._cache = pickle.load(fp)
-            else:
-                print(colorize(' • Computing queries memory cache\n', color='yellow'))
-                self._precompute_memories(dataset)
+        self._create_cache(cache_path)
 
     def batch_address(self, query_batch, train=False):
         batch_keys = []
@@ -51,9 +39,9 @@ class KeyValueMemory(object):
             batch_values.extend(values)
             negative_candidates.extend(candidates)
 
-        keys_tensor = self.process(batch_keys)
-        values_tensor = self.process(batch_values)
-        candidates_tensor = self.process(negative_candidates)
+        keys_tensor = self._dataset.process(batch_keys)
+        values_tensor = self._dataset.process(batch_values)
+        candidates_tensor = self._dataset.process(negative_candidates)
 
         keys_view = keys_tensor.view(len(query_batch),
                                      self._memories_count,
@@ -76,7 +64,7 @@ class KeyValueMemory(object):
         if isinstance(query, torch.Tensor):
             query = self._tensor_to_tokens(query)
 
-        if self._use_cached and train:
+        if train:
             return self._cache[repr(query)]
 
         queries, responses = zip(*self._query_matcher.most_similar(query))
@@ -94,40 +82,39 @@ class KeyValueMemory(object):
         return candidates
 
     def _tensor_to_tokens(self, tensor):
-        pad_token_idx = self.vocab.stoi['<pad>']
-        return [self.vocab.itos[idx] for idx in tensor.data if idx != pad_token_idx]
+        pad_token_idx = self._dataset.vocab.stoi['<pad>']
+        return [self._dataset.vocab.itos[idx] for idx in tensor.data if idx != pad_token_idx]
 
-    def _precompute_memories(self, dataset, out_file=MEMORY_CACHE_PATH):
+    def _create_cache(self, cache_path):
+        if os.path.isfile(cache_path):
+            with open(cache_path, 'rb') as fp:
+                self._cache = pickle.load(fp)
+            print(colorize(' • Queries memory cache loaded\n', color='yellow'))
+        else:
+            print(colorize(' • Computing query memory cache\n', color='yellow'))
+            self._cache_memories()
+
+    def _cache_memories(self, out_file=MEMORY_CACHE_PATH):
         cache = {}
-        for example in tqdm(dataset.data.examples):
+        for example in tqdm(self._dataset.data.examples):
             query = example.query
             memories = self.address(query, random_candidates=True)
             cache[repr(query)] = memories
 
         with open(out_file, 'wb') as fp:
             pickle.dump(cache, fp, protocol=pickle.HIGHEST_PROTOCOL)
-            print('{}{}'.format(colorize('\nCache saved to '),
+            print('{}{}'.format(colorize('\nQuery memory cache saved to '),
                                 colorize("'{}'\n".format(out_file), color='white')))
-
         self._cache = cache
 
 
 class QueryMatcher(object):
 
-    def __init__(self, examples):
-        self.queries, self.responses = [], []
-
-        for example in examples:
-            self.queries.append(example.query)
-            self.responses.append(example.response)
+    def __init__(self, examples, tfidf_cache_path=TFIDF_CACHE_PATH):
+        self.queries, self.responses = zip(*[(ex.query, ex.response) for ex in examples])
 
         self._tokens = set(itertools.chain.from_iterable(self.queries))
-
-        print(colorize(' • Calculating term frequencies', color='yellow'))
-        self._calculate_term_freqs()
-
-        print(colorize(' • Calculating inverse document frequencies', color='yellow'))
-        self._calculate_inverse_doc_freqs()
+        self._calculate_tfidf_weights(cache_path=tfidf_cache_path)
 
     def most_similar(self, input_query, n=MEMORIES_COUNT):
         input_query_vector, candidate_query_vectors = self._vectorize_queries(input_query)
@@ -176,6 +163,30 @@ class QueryMatcher(object):
 
         return input_query_vector, candidate_query_vectors
 
+    def _calculate_tfidf_weights(self, cache_path):
+        if os.path.isfile(cache_path):
+            with open(cache_path, 'rb') as fp:
+                tfidf_weights = pickle.load(fp)
+
+            self.term_freqs_per_query = tfidf_weights['tf']
+            self.inverse_doc_freqs = tfidf_weights['idf']
+            print(colorize(' • TFIDF cache loaded', color='yellow'))
+        else:
+            print(colorize(' • Calculating term frequencies', color='yellow'))
+            self._calculate_term_freqs()
+
+            print(colorize(' • Calculating inverse document frequencies', color='yellow'))
+            self._calculate_inverse_doc_freqs()
+
+            tfidf_weights = dict(tf=self.term_freqs_per_query,
+                                 idf=self.inverse_doc_freqs)
+
+            with open(cache_path, 'wb') as fp:
+                pickle.dump(tfidf_weights, fp, protocol=pickle.HIGHEST_PROTOCOL)
+
+            print('{}{}'.format(colorize('\nTFIDF cache saved to '),
+                                colorize("'{}'\n".format(cache_path), color='white')))
+
     def _calculate_term_freqs(self):
         self.term_freqs_per_query = [self._term_freqs(query) for query in self.queries]
 
@@ -201,7 +212,7 @@ if __name__ == '__main__':
     from dataset import Dataset
 
     dataset = Dataset()
-    kv_memory = KeyValueMemory(dataset, use_cached=True)
+    kv_memory = KeyValueMemory(dataset)
 
     while True:
         print()

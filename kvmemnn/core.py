@@ -16,7 +16,7 @@ class Lucy(object):
 
     def __init__(self, model_path):
         self.data = Dataset()
-        self.memory = KeyValueMemory(self.data)
+        self.memory = KeyValueMemory(dataset=self.data)
         self.cosine_similarity = CosineSimilarity(dim=2)
         self._load_model(model_path)
 
