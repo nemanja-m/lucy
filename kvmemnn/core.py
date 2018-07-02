@@ -18,18 +18,19 @@ class InvalidQuery(Exception):
 
 class Lucy(object):
 
-    def __init__(self, model_path):
+    def __init__(self, model_path, device='cpu'):
         self.dataset = Dataset()
         self.memory = KeyValueMemory(dataset=self.dataset)
         self.cosine_similarity = CosineSimilarity(dim=2)
-        self._load_model(model_path)
+        self._load_model(model_path, device=device)
 
-    def _load_model(self, model_path):
+    def _load_model(self, model_path, device):
         self.model = KeyValueMemoryNet(embedding_dim=EMBEDDING_DIM,
                                        vocab_size=len(self.dataset.vocab))
 
         print("Loading model from '{}'\n".format(colorize(model_path, color='white')))
-        self.model.load_state_dict(torch.load(model_path))
+        model_state = torch.load(model_path, map_location=device)
+        self.model.load_state_dict(model_state)
         self.model.eval()
 
     def respond(self, query):
