@@ -67,10 +67,19 @@ class KeyValueMemory(object):
         if train:
             return self._cache[repr(query)]
 
+        if self.is_unknown_query(query):
+            raise KeyError('Unknown tokens in query')
+
         queries, responses = zip(*self._query_matcher.most_similar(query))
         candidates = self._get_response_candidates(query, random=random_candidates)
 
         return queries, responses, candidates
+
+    def is_unknown_query(self, query_tokens):
+        return all(not self._query_token_exists(token) for token in query_tokens)
+
+    def _query_token_exists(self, token):
+        return token in self._query_matcher._tokens
 
     def _get_response_candidates(self, query, random=True):
         if random:

@@ -18,6 +18,9 @@ class InvalidQuery(Exception):
 
 class Lucy(object):
 
+    EMPTY_QUERY_RESPONSE = 'you said nothing.'
+    UNKNOWN_QUERY_RESPONSE = 'i do not understand.'
+
     def __init__(self, model_path, device='cpu'):
         self.dataset = Dataset()
         self.memory = KeyValueMemory(dataset=self.dataset)
@@ -64,10 +67,10 @@ class Lucy(object):
 
     def _validate_query(self, query_tokens):
         if not query_tokens:
-            raise InvalidQuery('you said nothing')
+            raise InvalidQuery(self.EMPTY_QUERY_RESPONSE)
 
-        if all(token not in self.dataset.vocab.stoi for token in query_tokens):
-            raise InvalidQuery('i do not understand what you said')
+        if self.memory.is_unknown_query(query_tokens):
+            raise InvalidQuery(self.UNKNOWN_QUERY_RESPONSE)
 
     def _batchify(self, query):
         return self.dataset.process(query)
