@@ -16,9 +16,29 @@ EPS = 1e-10
 MEMORIES_COUNT = 10
 
 
-class KeyValueMemory(object):
+class KeyValueMemory:
+    """Defines key-value pairs required for KV-MemNN training.
+
+    Stores key-value pairs where keys are queries and values are corresponding
+    responses. For input query, MEMORIES_COUNT number of related memories are
+    selected.  Similar queries from memory are selected based on TFIDF
+    vectorization and cosine distance.
+
+    Relevant memories for each query are cached to improve training speed.
+    TFIDF weights are also cached.
+
+    """
 
     def __init__(self, dataset, memories_count=MEMORIES_COUNT, cache_path=MEMORY_CACHE_PATH):
+        """Initializes memory pairs and creates TFIDF based query matcher.
+
+        Args:
+            dataset (Dataset): Dataset with query-response examples.
+            memories_count (int, optional): Number of relevant memories per query.
+                Default: 10.
+            cache_path (str, optional): Path to memories cache file.
+                Default: constants.MEMORY_CACHE_PATH.
+        """
         print(colorize('\nInitializing key-value memory'))
 
         self._dataset = dataset
@@ -28,12 +48,24 @@ class KeyValueMemory(object):
         self._create_cache(cache_path)
 
     def batch_address(self, query_batch, train=False):
+        """Addresses memories in batch.
+
+        For each query from batch, perform memory addressing and transform
+        related memories to torch.Tensor objects.
+
+        Args:
+            query_batch (torch.Tensor): Batch of queries.
+            train (bool ,optional): Indicates training phase. Default: False.
+
+        Returns:
+            Tuple of relevant memory keys, memory values and response candidates.
+            Each tuple element is instance of torch.Tensor.
+        """
         batch_keys = []
         batch_values = []
         negative_candidates = []
 
-        for idx in range(len(query_batch)):
-            query = query_batch[idx, :]
+        for query in query_batch:
             keys, values, candidates = self.address(query, train=train)
             batch_keys.extend(keys)
             batch_values.extend(values)
@@ -58,6 +90,27 @@ class KeyValueMemory(object):
         return keys_view, values_view, candidates_view
 
     def address(self, query, train=False, random_candidates=False):
+        """Addresses memory and returns relevant memories and candidates for input query.
+
+        In train phase, returns cached memories and candidates. Otherwise,
+        calculates most similar queries from memory and returns top n similar queries.
+
+        Args:
+            query (list of str or torch.Tensor): Input query. It can be list of query tokens
+                or torch.Tensor. When query is tensor, it will be converted to string tokens
+                before memory addressing.
+            train (bool, optional) Indicates training phase. Default: False.
+            random_candidates (bool, optional): Indicates whether to select random candidates
+                or to choose top n similar responses from memory as candidates.
+
+        Returns:
+            Tuple of relevant memory keys, memory values and response candidates.
+            Each tuple element is list.
+
+        Raises:
+            KeyError: If query is empty.
+            KeyError: If all tokens from query are unknown (not present in vocabulary).
+        """
         if len(query) == 0:
             raise KeyError('Query is empty')
 
@@ -117,15 +170,60 @@ class KeyValueMemory(object):
         self._cache = cache
 
 
-class QueryMatcher(object):
+class QueryMatcher:
+    """Matches input query to the most similar queries in corpus.
+
+    Each query is represented as vector using TFIDF weights. Input query is
+    transformed into vector and compared to each query from memory using cosine
+    similarity.  Top n most similar queries are selected.
+
+    TFIDF weights are calculated once and cached for later usage.
+
+    Attributes:
+        queries (list of list of strings): List of query tokens.
+        responses (list of list of strings): List of response tokens.
+        term_freqs_per_query (list of dict): List of term frequencies for each query.
+        inverse_doc_freqs (dict): Dictionary with tokens as keys and inverse document
+            frequency as values.
+    """
 
     def __init__(self, examples, tfidf_cache_path=TFIDF_CACHE_PATH):
+        """Initializes TFIDF weights.
+
+        Args:
+            examples (list of torchtext.Example): List of dataset examples with query and
+                response pairs.
+            tfidf_cache_path (str, optional): Path to TFIDF weights cache.
+                Default: constants.TFIDF_CACHE_PATH
+        """
         self.queries, self.responses = zip(*[(ex.query, ex.response) for ex in examples])
 
         self._tokens = set(itertools.chain.from_iterable(self.queries))
         self._calculate_tfidf_weights(cache_path=tfidf_cache_path)
 
     def most_similar(self, input_query, n=MEMORIES_COUNT):
+        """Returns top n most similar query-response pairs to the input query.
+
+        Using term frequencies and inverse document frequencies, input query and
+        queries from dataset are transformed into vectors with shape of Nx1 and
+        QxN respectively, where N is number of tokens in input query, Q is total
+        number of queries in dataset.
+
+        Cosine similarity between vectorized input query and queries from
+        dataset is calculated and indexes of top n most similar queries are
+        returned. Special case is when number of tokens in input query is 1 (or
+        N is 1). Cosine similarity is not defined for scalars so we use
+        normalized absolute difference between scalar representation of input
+        query and dataset queries.
+
+        Args:
+            input_query (list of str): List of query tokens for which top n most similar
+                queries from dataset are selected.
+            n (int, optional): Number of most similar queries to return. Default MEMORIES_COUNT.
+
+        Returns:
+            List of tuples of top n most similar query-response pairs to input query.
+        """
         input_query_vector, candidate_query_vectors = self._vectorize_queries(input_query)
 
         use_cosine_similarity = len(input_query) > 1
@@ -218,15 +316,21 @@ class QueryMatcher(object):
 
 if __name__ == '__main__':
     # Interactive testing for relevant memories retrieval
+    import revtok
     from dataset import Dataset
 
     dataset = Dataset()
     kv_memory = KeyValueMemory(dataset)
 
-    while True:
-        print()
-        query = input('> ').strip().split()
-        queries, responses, _ = kv_memory.address(query)
-        for key, value in zip(queries, responses):
-            print('{} : {}'.format(' '.join(key),
-                                   ' '.join(value)))
+    print('Interactive memory retrieval. {} to cancel\n'.format(colorize('Press CTRL + C',
+                                                                         color='white')))
+    try:
+        while True:
+            query = revtok.tokenize(input('> ').strip())
+            queries, responses, _ = kv_memory.address(query)
+            for key, value in zip(queries, responses):
+                print('\nQ: {query}'.format(query=revtok.detokenize(key)))
+                print('R: {response}'.format(response=revtok.detokenize(value)))
+            print()
+    except (KeyboardInterrupt, EOFError):
+        print('\n\nShutting down')

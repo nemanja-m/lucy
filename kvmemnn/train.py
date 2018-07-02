@@ -25,32 +25,43 @@ History = namedtuple('History', ['losses', 'hits'])
 
 
 class Trainer(object):
+    """Utility class for PyTorch model training and visualization.
+
+    Manages training process, evaluation metrics and handles visualization with
+    visdom.
+
+    Attributes:
+        device (torch.device): Device for model training.
+        batch_size (int): Size of batch.
+        learning_rate (float): Learning rate for optimizer.
+        embedding_dim (int): Dimension of embedding layer.
+        model (KeyValueMemoryNet): PyTorch key-value memory network model instance.
+    """
 
     def __init__(self, device, batch_size, learning_rate, embedding_dim):
-        self.device = device
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.embedding_dim = embedding_dim
 
-        self.data = Dataset(batch_size=BATCH_SIZE)
-        self.memory = KeyValueMemory(self.data)
+        self._device = device
+        self._data = Dataset(batch_size=BATCH_SIZE)
+        self._memory = KeyValueMemory(self._data)
 
         self.model = KeyValueMemoryNet(embedding_dim=embedding_dim,
-                                       vocab_size=len(self.data.vocab)).to(device=device)
+                                       vocab_size=len(self._data.vocab)).to(device=device)
 
-        self.loss_criterion = CosineEmbeddingLoss(margin=0.1,
-                                                  size_average=False).to(device=device)
+        self._loss_criterion = CosineEmbeddingLoss(margin=0.1,
+                                                   size_average=False).to(device=device)
 
-        self.cosine_similarity = CosineSimilarity(dim=2)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        self.hits = (1, 5, 10)
-
+        self._cosine_similarity = CosineSimilarity(dim=2)
+        self._optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self._hits = (1, 5, 10)
         self._init_visdom()
 
     def train(self, epochs):
         print('Starting training')
         print(' - Epochs {}'.format(epochs))
-        print(' - Batches: {}'.format(len(self.data.train_iter)))
+        print(' - Batches: {}'.format(len(self._data.train_iter)))
         print(' - Batch size: {}'.format(self.batch_size))
         print(' - Learning rate: {}'.format(self.learning_rate))
         print(' - Embedding dim: {}\n'.format(self.embedding_dim))
@@ -60,12 +71,12 @@ class Trainer(object):
         for epoch in range(epochs):
             self.model.train()
 
-            with tqdm(self.data.iterator,
+            with tqdm(self._data.iterator,
                       unit=' batches',
                       desc='Epoch {:3}/{}'.format(epoch + 1, epochs)) as pb:
 
                 for batch in pb:
-                    self.optimizer.zero_grad()
+                    self._optimizer.zero_grad()
 
                     x, y = self._forward(query_batch=batch.query,
                                          response_batch=batch.response)
@@ -74,7 +85,7 @@ class Trainer(object):
                     loss = self._compute_loss(x, y, targets)
                     loss.backward()
 
-                    self.optimizer.step()
+                    self._optimizer.step()
                     self.history.losses[epoch].append(loss.item())
 
                     mean_loss = np.mean(self.history.losses[epoch])
@@ -88,14 +99,13 @@ class Trainer(object):
 
         with torch.no_grad():
             hits = []
-            for batch in self.data.validation_iter:
+            for batch in self._data.validation_iter:
                 x, y = self._forward(query_batch=batch.query,
                                      response_batch=batch.response)
 
-                predictions = self.cosine_similarity(x, y)
+                predictions = self._cosine_similarity(x, y)
                 _, indices = predictions.sort(descending=True)
-
-                hits.append([self._hits_at_n(indices, n) for n in self.hits])
+                hits.append([self._hits_at_n(indices, n) for n in self._hits])
 
             mean_hits = np.array(hits).mean(axis=0)
             self.history.hits[epoch] = mean_hits
@@ -104,16 +114,16 @@ class Trainer(object):
         return response_indices[:, :n].eq(0).sum().item() / len(response_indices)
 
     def _forward(self, query_batch, response_batch, train=True):
-        keys, values, candidates = self.memory.batch_address(query_batch, train=train)
+        keys, values, candidates = self._memory.batch_address(query_batch, train=train)
 
-        return self.model(query_batch.to(device=self.device),
-                          response_batch.to(device=self.device),
-                          keys.to(device=self.device),
-                          values.to(device=self.device),
-                          candidates.to(device=self.device))
+        return self.model(query_batch.to(device=self._device),
+                          response_batch.to(device=self._device),
+                          keys.to(device=self._device),
+                          values.to(device=self._device),
+                          candidates.to(device=self._device))
 
     def _make_targets(self, shape):
-        targets = -torch.ones(shape, device=self.device)
+        targets = -torch.ones(shape, device=self._device)
         targets[:, 0] = 1  # First candidate response is correct one
         return targets
 
@@ -121,7 +131,7 @@ class Trainer(object):
         # CosineEmbeddingLoss doesn't support 3-d tensors so we must create
         # custom loss where we add individual losses accross batch dimension
         cosine_embedding_losses = torch.stack([
-            self.loss_criterion(x[i, :, :], y[i, :, :], targets[i, :])
+            self._loss_criterion(x[i, :, :], y[i, :, :], targets[i, :])
             for i in range(len(x))
         ])
         return torch.sum(cosine_embedding_losses) / len(x)
@@ -171,7 +181,7 @@ class Trainer(object):
                                             X=np.array([0]),
                                             opts=loss_options)
 
-        hits_legend = ['hits@' + hit for hit in self.hits]
+        hits_legend = ['hits@' + hit for hit in self._hits]
         hits_options = plot_options(title='hits@n',
                                     ylabel='%',
                                     showlegend=True,
@@ -199,7 +209,8 @@ class Trainer(object):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train Key-Value Memory Network on ALICE bot data')
+    parser = argparse.ArgumentParser(
+        description='Train Key-Value Memory Network on query-response dataset')
     parser.add_argument('--cpu',
                         action='store_true',
                         help='Disable CUDA training and train on CPU')
