@@ -5,7 +5,7 @@ from torch.nn import CosineSimilarity
 from colors import colorize
 from dataset import Dataset
 from memory import KeyValueMemory
-from module import KeyValueMemoryNet
+from kvmemnn import KeyValueMemoryNet
 from postprocessing import postprocess
 
 
