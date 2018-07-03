@@ -1,0 +1,3 @@
+include lucy/models/lucy
+include lucy/cache/*
+include lucy/data/data.csv
