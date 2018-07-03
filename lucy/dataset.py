@@ -9,7 +9,7 @@ DEFAULT_BATCH_SIZE = 32
 TRAIN_TEST_VAL_RATIO = [0.90, 0.05, 0.05]
 
 
-class Dataset(object):
+class Dataset:
     """Defines dataset composed of queries and responses.
 
     Provides train, test and validation splits. It can be used to create bucket

@@ -4,15 +4,15 @@ from torch.nn import CosineSimilarity
 
 from colors import colorize
 from dataset import Dataset
-from memory import KeyValueMemory
 from kvmemnn import KeyValueMemoryNet
+from memory import KeyValueMemory
 from postprocessing import postprocess
 
 
 EMBEDDING_DIM = 128
 
 
-class Lucy(object):
+class Lucy:
     """Defines a Lucy chat-bot instance.
 
     Lucy chat-bot model can be initialized on GPU or CPU (default). It responds

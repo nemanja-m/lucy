@@ -10,10 +10,10 @@ from torch.nn import CosineEmbeddingLoss, CosineSimilarity
 from tqdm import tqdm
 from visdom import Visdom
 
-from dataset import Dataset
 from constants import MODELS_DIR
-from memory import KeyValueMemory
+from dataset import Dataset
 from kvmemnn import KeyValueMemoryNet
+from memory import KeyValueMemory
 
 
 EPOCHS = 10
@@ -24,7 +24,7 @@ LEARNING_RATE = 2.5e-3
 History = namedtuple('History', ['losses', 'hits'])
 
 
-class Trainer(object):
+class Trainer:
     """Utility class for PyTorch model training and visualization.
 
     Manages training process, evaluation metrics and handles visualization with
@@ -59,6 +59,11 @@ class Trainer(object):
         self._init_visdom()
 
     def train(self, epochs):
+        """Starts model training and visualization.
+
+        Args:
+            epochs (int): Number of epochs for training.
+        """
         print('Starting training')
         print(' - Epochs {}'.format(epochs))
         print(' - Batches: {}'.format(len(self._data.train_iter)))
@@ -249,7 +254,7 @@ def main():
     if torch.cuda.is_available() and not args.cpu:
         device = torch.device('cuda')
         print('\nUsing CUDA for training')
-        print('Pass \'--cpu\' argument to disable CUDA and train on CPU')
+        print("Pass '--cpu' argument to disable CUDA and train on CPU")
     else:
         device = torch.device('cpu')
         print('\nUsing CPU for training')
