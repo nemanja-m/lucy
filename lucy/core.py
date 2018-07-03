@@ -2,11 +2,12 @@ import revtok
 import torch
 from torch.nn import CosineSimilarity
 
-from colors import colorize
-from dataset import Dataset
-from kvmemnn import KeyValueMemoryNet
-from memory import KeyValueMemory
-from postprocessing import postprocess
+from .colors import colorize
+from .dataset import Dataset
+from .kvmemnn import KeyValueMemoryNet
+from .memory import KeyValueMemory
+from .postprocessing import postprocess
+from .verbosity import verbose
 
 
 EMBEDDING_DIM = 128
@@ -104,6 +105,7 @@ class Lucy:
     def _batchify(self, query):
         return self._dataset.process(query)
 
+    @verbose
     def _load_model(self, model_path, device):
         self.model = KeyValueMemoryNet(embedding_dim=EMBEDDING_DIM,
                                        vocab_size=len(self._dataset.vocab))

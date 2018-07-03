@@ -1,8 +1,9 @@
 import torch
 from torchtext.data import Field, TabularDataset, BucketIterator, interleave_keys
 
-from colors import colorize
-from constants import DATA_PATH
+from .colors import colorize
+from .constants import DATA_PATH
+from .verbosity import verbose
 
 
 DEFAULT_BATCH_SIZE = 32
@@ -26,6 +27,7 @@ class Dataset:
         iterator (torchtext.BucketIterator): Iterator over all examples.
     """
 
+    @verbose
     def __init__(self, path=DATA_PATH,
                  device=torch.device('cpu'),
                  batch_size=DEFAULT_BATCH_SIZE,

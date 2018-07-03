@@ -10,10 +10,11 @@ from torch.nn import CosineEmbeddingLoss, CosineSimilarity
 from tqdm import tqdm
 from visdom import Visdom
 
-from constants import MODELS_DIR
-from dataset import Dataset
-from kvmemnn import KeyValueMemoryNet
-from memory import KeyValueMemory
+from .constants import MODELS_DIR
+from .dataset import Dataset
+from .kvmemnn import KeyValueMemoryNet
+from .memory import KeyValueMemory
+from .verbosity import verbose, set_verbosity
 
 
 EPOCHS = 10
@@ -58,6 +59,7 @@ class Trainer:
         self._hits = (1, 5, 10)
         self._init_visdom()
 
+    @verbose
     def train(self, epochs):
         """Starts model training and visualization.
 
@@ -150,6 +152,7 @@ class Trainer:
         self.history = History(losses=[[]] * epochs,
                                hits=[None] * epochs)
 
+    @verbose
     def _init_visdom(self):
         self.visdom = Visdom()
 
@@ -245,19 +248,30 @@ def parse_args():
                         default=os.path.join(MODELS_DIR, 'lucy'),
                         help='Turn on interactive mode after training')
 
+    parser.add_argument('-s', '--silent',
+                        action='store_true',
+                        help='Turn off verbose output')
+
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
-
-    if torch.cuda.is_available() and not args.cpu:
+@verbose
+def get_device(use_cpu):
+    if torch.cuda.is_available() and not use_cpu:
         device = torch.device('cuda')
         print('\nUsing CUDA for training')
         print("Pass '--cpu' argument to disable CUDA and train on CPU")
     else:
         device = torch.device('cpu')
         print('\nUsing CPU for training')
+    return device
+
+
+def main():
+    args = parse_args()
+    set_verbosity(verbose=not args.silent)
+
+    device = get_device(use_cpu=args.cpu)
 
     trainer = Trainer(device,
                       batch_size=args.batch,

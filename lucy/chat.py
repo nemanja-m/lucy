@@ -1,9 +1,10 @@
 import argparse
 import os
 
-from colors import colorize
-from constants import MODELS_DIR
-from core import Lucy
+from .colors import colorize
+from .constants import MODELS_DIR
+from .core import Lucy
+from .verbosity import set_verbosity
 
 
 def parse_args():
@@ -15,6 +16,7 @@ def parse_args():
 
 
 def main():
+    set_verbosity(verbose=True)
     args = parse_args()
     lucy_bot = Lucy(model_path=args.model)
 

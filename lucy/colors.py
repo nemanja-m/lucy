@@ -5,6 +5,7 @@ COLORS = dict(
     blue='34m',
     white='39m'
 )
+"""Color to ASCI code dictionary."""
 
 
 def colorize(text, color='green', bold=True):

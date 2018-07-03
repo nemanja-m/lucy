@@ -8,8 +8,9 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from colors import colorize
-from constants import MEMORY_CACHE_PATH, TFIDF_CACHE_PATH
+from .colors import colorize
+from .constants import MEMORY_CACHE_PATH, TFIDF_CACHE_PATH
+from .verbosity import verbose
 
 
 EPS = 1e-10
@@ -29,6 +30,7 @@ class KeyValueMemory:
 
     """
 
+    @verbose
     def __init__(self, dataset, memories_count=MEMORIES_COUNT, cache_path=MEMORY_CACHE_PATH):
         """Initializes memory pairs and creates TFIDF based query matcher.
 
@@ -147,6 +149,7 @@ class KeyValueMemory:
         pad_token_idx = self._dataset.vocab.stoi['<pad>']
         return [self._dataset.vocab.itos[idx] for idx in tensor.data if idx != pad_token_idx]
 
+    @verbose
     def _create_cache(self, cache_path):
         if os.path.isfile(cache_path):
             with open(cache_path, 'rb') as fp:
@@ -156,6 +159,7 @@ class KeyValueMemory:
             print(colorize(' • Computing query memory cache\n', color='yellow'))
             self._cache_memories()
 
+    @verbose
     def _cache_memories(self, out_file=MEMORY_CACHE_PATH):
         cache = {}
         for example in tqdm(self._dataset.data.examples):
@@ -270,6 +274,7 @@ class QueryMatcher:
 
         return input_query_vector, candidate_query_vectors
 
+    @verbose
     def _calculate_tfidf_weights(self, cache_path):
         if os.path.isfile(cache_path):
             with open(cache_path, 'rb') as fp:
