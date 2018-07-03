@@ -2,7 +2,7 @@ import io
 import os
 import re
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def read(*names, **kwargs):
@@ -34,7 +34,7 @@ setup_info = dict(
     description='Chat bot based on Key-Value Memory Networks',
     long_description=LONG_DESCRIPTION,
     license='MIT',
-    packages=['lucy'],
+    packages=find_packages(),
     entry_points={
         'console_scripts': [
             'lucy-train = lucy.train:main',
@@ -42,21 +42,16 @@ setup_info = dict(
         ]
     },
     include_package_data=True,
-    # data_files=[
-    #     ('data/raw', ['data/raw/data.csv']),
-    #     ('models', ['models/lucy']),
-    #     ('cache', ['cache/memories', 'cache/tfidf'])
-    # ],
     install_requires=[
         'numpy',
-        'six',
         'revtok',
+        'six',
         'torch==0.4.0',
-        'torchtext==0.2.3',
+        'torchtext==0.3.0',
         'tqdm',
     ],
     dependency_links=[
-        'git+git://github.com/pytorch/text.git@master'
+        'git+https://github.com/pytorch/text.git@master#egg=torchtext-0.3.0'
     ]
 )
 

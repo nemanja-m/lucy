@@ -1,3 +1,3 @@
-include models/lucy
-include cache/*
-include data/raw/data.csv
+include lucy/models/lucy
+include lucy/cache/*
+include lucy/data/data.csv
