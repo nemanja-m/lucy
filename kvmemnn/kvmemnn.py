@@ -3,8 +3,29 @@ from torch.nn import Module, Linear, Softmax, CosineSimilarity, Embedding
 
 
 class KeyValueMemoryNet(Module):
+    """Defines PyTorch model for Key-Value Memory Network.
+
+    Key-Value Memory Networks (KV-MemNN) are described here: https://arxiv.org/pdf/1606.03126.pdf
+
+    Goal is to read correct response from memory, given query. Memory slots are
+    defined as pairs (k, v) where k is query and v is correct response. This
+    implementation of KV-MemNN uses separate encodings for input query and
+    possible candidates. Instead of using cross-entropy loss, we use cosine
+    embedding loss where we measure cosine distance between read responses and
+    candidate responses. We use only one 'hop' because more hops don't provide
+    any improvements.
+
+    This implementation supports batch training.
+
+    """
 
     def __init__(self, vocab_size, embedding_dim):
+        """Initializes model layers.
+
+        Args:
+            vocab_size (int): Number of tokens in corpus. This is used to init embeddings.
+            embedding_dim (int): Dimension of embedding vector.
+        """
         super().__init__()
 
         self._embedding_dim = embedding_dim
@@ -17,6 +38,21 @@ class KeyValueMemoryNet(Module):
         self.softmax = Softmax(dim=2)
 
     def forward(self, query, response, memory_keys, memory_values, candidates):
+        """Performs forward step.
+
+        Args:
+            query (torch.Tensor): Tensor with shape of (NxM) where N is batch size,
+               and M is length of padded query.
+            response (torch.Tensor): Tensor with same shape as query denoting correct responses.
+            memory_keys (torch.Tensor): Relevant memory keys for given query batch. Shape
+                of tensor is (NxMxD) where N is batch size, M is number of relevant memories
+                per query and D is length of memories.
+            memory_values (torch.Tensor): Relevant memory values for given query batch
+                with same shape as memory_keys.
+            candidates (torch.Tensor): Possible responses for query batch with shape
+                (NxMxD) where N is batch size, M is number of candidates per query and
+                D is length of candidates.
+        """
         view_shape = (len(query), 1, self._embedding_dim)
 
         query_embedding = self.encoder_in(query).view(*view_shape)
@@ -43,8 +79,15 @@ class KeyValueMemoryNet(Module):
 
 
 class Encoder(Module):
+    """Embeds queries, memories or responses into vectors."""
 
     def __init__(self, num_embeddings, embedding_dim):
+        """Initializes embedding layer.
+
+        Args:
+            num_embeddings (int): Number of possible embeddings.
+            embedding_dim (int): Dimension of embedding vector.
+        """
         super().__init__()
 
         self.embedding = Embedding(num_embeddings=num_embeddings,
