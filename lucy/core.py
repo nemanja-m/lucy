@@ -1,8 +1,11 @@
+import os
+
 import revtok
 import torch
 from torch.nn import CosineSimilarity
 
 from .colors import colorize
+from .constants import MODELS_DIR
 from .dataset import Dataset
 from .kvmemnn import KeyValueMemoryNet
 from .memory import KeyValueMemory
@@ -10,6 +13,7 @@ from .postprocessing import postprocess
 from .verbosity import verbose
 
 
+MODEL_PATH = os.path.join(MODELS_DIR, 'lucy')
 EMBEDDING_DIM = 128
 
 
@@ -28,11 +32,12 @@ class Lucy:
     EMPTY_QUERY_RESPONSE = 'you said nothing.'
     UNKNOWN_QUERY_RESPONSE = 'i do not understand.'
 
-    def __init__(self, model_path, device='cpu'):
+    def __init__(self, model_path=MODEL_PATH, device='cpu'):
         """Initializes key-value memories from dataset and loads pretrained model.
 
         Args:
-            model_path (str): Path to the pretrained model weights.
+            model_path (str, optional): Path to the pretrained model weights.
+                Default: constants.MODELS_DIR/lucy
             device (str, optional): Device indicator on which model will be loaded.
                 Use 'cuda:device_id' where 'device_id' is ID of CUDA device
                 for CUDA enabled GPU (e.g. 'cuda:0') or 'cpu' for CPU. Default: 'cpu'.
