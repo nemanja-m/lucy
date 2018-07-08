@@ -40,7 +40,7 @@ processing_methods = {
 def postprocess(query):
     """Handles special queries and provides an adequate response.
 
-    Special queries suck as 'what is the time?' needs real time data which can't
+    Special queries such as 'what is the time?' need real time data that can't
     be obtained from dataset. This method handles such queries to provide
     correct response. Special queries start with # sign.
 

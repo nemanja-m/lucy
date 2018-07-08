@@ -246,7 +246,7 @@ def parse_args():
     parser.add_argument('-w', '--weights_path',
                         type=str,
                         default=os.path.join(MODELS_DIR, 'lucy'),
-                        help='Turn on interactive mode after training')
+                        help='Path where trained model will be saved')
 
     parser.add_argument('-s', '--silent',
                         action='store_true',
